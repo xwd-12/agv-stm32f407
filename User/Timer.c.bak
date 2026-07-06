@@ -1,0 +1,83 @@
+#include "timer.h"
+#include "stm32f4xx.h"
+#include "enconder.h"
+#include "motor.h"
+#include "pid.h"
+#include "line_follow.h"
+#include "smooth_servo.h"
+extern PID_Handle pid_motor[4];
+extern int16_t target_speed[4];
+extern PID_Handle pid_positon[4];
+extern int32_t target_position[4] ;
+extern uint8_t work_mode;
+extern Line_follow_Handle line_follow;
+
+void Timer_Init(void)
+{
+		TIM_TimeBaseInitTypeDef Tim_Struture;
+	NVIC_InitTypeDef NVIC_Struture;
+
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM6,ENABLE);
+
+	TIM_InternalClockConfig(TIM6);
+	Tim_Struture.TIM_ClockDivision =TIM_CKD_DIV1 ;
+	Tim_Struture.TIM_CounterMode =TIM_CounterMode_Up ;
+	Tim_Struture.TIM_Prescaler = 8400-1;
+	Tim_Struture.TIM_Period =100-1 ;
+	Tim_Struture.TIM_RepetitionCounter =0 ;
+	TIM_TimeBaseInit(TIM6,&Tim_Struture);
+
+	TIM_ITConfig(TIM6,TIM_IT_Update,ENABLE);
+
+	TIM_ClearFlag(TIM6,TIM_IT_Update);
+
+	NVIC_Struture.NVIC_IRQChannel = TIM6_DAC_IRQn;
+	NVIC_Struture.NVIC_IRQChannelCmd = ENABLE;
+	NVIC_Struture.NVIC_IRQChannelPreemptionPriority =1 ;
+	NVIC_Struture.NVIC_IRQChannelSubPriority =0;
+	NVIC_Init(&NVIC_Struture);
+
+	TIM_Cmd(TIM6,ENABLE);
+}
+
+void TIM6_DAC_IRQHandler(void)
+{
+	int i = 0;
+	static uint8_t pos_step = 0;
+ if(TIM_GetITStatus(TIM6,TIM_IT_Update) == SET)
+ {
+	 smoothservo_TimerHandle();
+
+	 if(work_mode == MODE_LINE_FOLLOW)
+	 {
+	 LineFollow_Task(&line_follow,target_speed);
+	 }
+	 
+	 else if(work_mode ==MODE_POSITION)
+	 {
+		 pos_step++;
+	if ( pos_step>= 2)
+	{
+		pos_step = 0;
+		for(i = 0;i<4;i++)
+		{
+		int32_t current_pos = Encoder_GetPosition(i);
+			float speed_cmd = PID_Update(&pid_positon[i],(float)target_position[i],(float) current_pos,0.02f);
+			if(speed_cmd>600) speed_cmd= 600.0f;
+			if(speed_cmd<-600) speed_cmd=-600.0f;
+     target_speed[i] = (int16_t)speed_cmd;
+		}
+	}
+}
+ // speed closed loop 10ms
+ for(i = 0; i < 4; i++)
+ {
+	 int16_t real = Encoder_getspeed(i);
+	 float out = (float)target_speed[i]; // DEBUG: open-loop bypass PID
+	 if(out > 1000.0f) out = 1000.0f;
+	 if(out < -1000.0f) out = -1000.0f;
+	 Motor_SetSpeed(i, (int16_t)out);
+ }
+	 TIM_ClearITPendingBit(TIM6, TIM_IT_Update);
+}
+}

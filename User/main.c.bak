@@ -1,0 +1,105 @@
+/**
+  *
+  * ʵ��ƽ̨��SICV  STM32_F407 ������
+*/
+#include "stm32f4xx.h"
+#include "./led/bsp_led.h"
+#include "Delay.h"
+#include "OLED.h"
+#include "Timer.h"
+#include "pwm.h"
+#include "pid.h"
+#include "line_follow.h"
+#include "enconder.h"
+#include "motor.h"
+#include "line_sensor.h"
+#include "smooth_servo.h"
+#include "command.h"
+#include "servo.h"
+#include "hc_sr40.h"
+#include "uart.h"
+#include "action_group.h"
+
+uint8_t KEYNUM;
+uint16_t NUM;
+uint16_t i;
+
+#define MODE_MANUAL       0
+#define MODE_LINE_FOLLOW  1
+#define MODE_POSITION     2
+
+uint8_t work_mode = MODE_MANUAL;
+Line_follow_Handle line_follow;
+PID_Handle pid_positon[4];
+int32_t target_position[4] = {0,0,0,0};
+PID_Handle pid_motor[4];
+int16_t target_speed[4] = {0,0,0,0};
+int8_t motor_dir[4] = {1, 1, 1, -1};  // 电机0 PA7方向翻转
+int8_t encoder_dir[4] = {1, 1, 1, 1};  // 编码器极性：-1 表示需翻转符号
+int16_t encoder_max[4] = {30, 30, 10, 10};  // 每电机10ms最大脉冲数（前轮编码器分辨率更高）
+
+int main(void)
+{
+   int i;
+    char cmd[64];
+	
+	SystemInit();
+    NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);
+    // 关闭Trace调试功能，释放PE3/PE4给电机0使用（必须在Motor_Init之前）
+    DBGMCU->CR &= ~(DBGMCU_CR_TRACE_IOEN | (0x3 << 6));
+	LED_Init();
+
+    OLED_Init();
+    OLED_Clear();
+    OLED_ShowString(0,0,(u8*)"Init...",16,1);
+
+    PWM_init();
+	Motor_Init();
+    Servo_Init();
+    smooth_Init();
+
+    Encoder_Init();
+
+    Line_sensor_Init();
+
+    uart_Init();
+    BT_Init();
+    USART_SendData(USART1, 'A');
+    while (USART_GetFlagStatus(USART1, USART_FLAG_TXE) == RESET);
+    USART_SendData(USART1, '\n');
+    while (USART_GetFlagStatus(USART1, USART_FLAG_TXE) == RESET);
+
+    lineFollow_Init(&line_follow, 500, 0.8, 0.02, 0.01, 0.01);
+    for(i=0; i<4; i++)
+	{
+        PID_Init(&pid_motor[i], PID_INCREMENTAL, 1.5, 0.2, 0.0, 50, 1000, 100);
+        PID_Init(&pid_positon[i], PID_POSITION, 0.5, 0.001, 0, 200, 600, 300);
+    }
+
+    Timer_Init();
+
+	Action_Reset();
+
+	// 设置初始目标速度
+	target_speed[0] = 300;
+	target_speed[1] = 300;
+	target_speed[2] = 300;
+	target_speed[3] = 300;
+    OLED_ShowString(0,2,(u8*)"Ready",16,1);
+    while (1)
+    {
+        // 轮询USART1接收（串口命令）
+        if (UART_GetCommand(cmd, sizeof(cmd)))
+        {
+            uart_set_bt_output(0);
+            Commend_Parse(cmd);
+        }
+
+        // 轮询蓝牙接收
+        if (BT_GetLine(cmd, sizeof(cmd)))
+        {
+            uart_set_bt_output(1);
+            Commend_Parse(cmd);
+        }
+    }
+}
