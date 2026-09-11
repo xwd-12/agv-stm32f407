@@ -1,354 +1,164 @@
-# AGV 智能搬运机器人
+# STM32F407 AGV 智能搬运机器人
 
-> 2026 全国大学生嵌入式芯片与系统设计竞赛 — ST 赛道参赛作品
+> 2026 全国大学生嵌入式芯片与系统设计竞赛 ST 赛道参赛作品
 
-## 项目简介
+本项目以 STM32F407ZGTx 为主控，构建四轮差速移动底盘、4-DOF 机械臂、独立挂钩舵机与 OpenMV H7 Plus 视觉系统。它将巡线、二维码触发、端侧视觉识别、颜色对准抓取、AprilTag 视觉伺服和无动力从车拖挂串成一套自主搬运流程。
 
-基于 STM32F407ZGTx (168MHz) 的四轮差速驱动 AGV，搭载 4-DOF 机械臂、独立挂钩舵机与 OpenMV 视觉模块，实现**自主巡线、QR 二维码识别、AI 视觉分类、颜色对准抓取、视觉伺服对接与从车拖挂**的全流程智能搬运。系统采用 100Hz 定时中断作为控制心跳，7 个状态机协同工作，支持串口实时调参与 CSV 数据遥测。
+完整任务链路为：巡线行驶 -> 十字路口触发 -> AprilTag 对接从车 -> QR 触发工位任务 -> 视觉识别与抓取 -> 从车装载或交付。
 
-**应用场景**：
-- **医院物流**：端侧 AI 离线运行，无需网络，隐私安全
-- **快递中转场**：从车拖挂 + 视觉伺服高精度对接（±1cm）
+> 当前默认烧录配置用于工位演示：程序假定从车已预先挂接，并从巡线和工位任务开始执行。完整自动对接功能保留在工程中，需恢复经过实车标定的完整构建配置后再启用。
 
----
+## 目录
 
-## 硬件架构
+- [功能概览](#功能概览)
+- [完整作业流程](#完整作业流程)
+- [硬件与软件架构](#硬件与软件架构)
+- [视觉任务](#视觉任务)
+- [构建与部署](#构建与部署)
+- [串口调试](#串口调试)
+- [目录结构](#目录结构)
+- [安全说明](#安全说明)
 
-```
-STM32F407ZGTx (168MHz)
-├── 4× 直流减速电机 (PWM 1kHz, 四轮差速驱动)
-├── 4× 霍尔编码器 (正交解码, TIM2/4/5/8)
-├── 5× 舵机 (腰座/大臂/小臂/夹爪/挂钩, 50Hz PWM)
-├── 5× 红外巡线传感器 (PC0-PC3+PA4, 低电平有效)
-├── OpenMV Cam H7 Plus (USART3, 115200, 视觉+AI)
-└── USB-TTL 调试串口 (UART5, 115200)
-```
+## 功能概览
 
-### 硬件引脚分配
+| 能力 | 已实现内容 |
+| --- | --- |
+| 自主巡线 | 5 路红外巡线、PID 转向、十字路口识别与路线切换 |
+| 从车对接 | AprilTag 搜索、视觉伺服倒车、挂钩动作与回归巡线 |
+| 视觉搬运 | QR 任务触发、AI 分类、颜色目标对准、抓取与放置 |
+| 机械臂控制 | 4-DOF 机械臂动作组、独立挂钩舵机、五次样条平滑运动 |
+| 实时控制 | TIM6 100 Hz 控制心跳，巡线、视觉伺服和机械臂状态协同运行 |
+| 调试与调参 | UART5 指令调试、OpenMV 数据查看、可选 CSV 遥测与 LLM PID Tuner |
 
-| 子系统 | 外设 | 引脚 |
-|--------|------|------|
-| 电机 0 左前 | TIM3_CH2 | PA7 (PWM), PE3/PE4 (IN1/IN2) |
-| 电机 1 右前 | TIM3_CH1 | PA6 (PWM), PE5/PE6 (IN1/IN2) |
-| 电机 2 左后 | TIM3_CH4 | PB1 (PWM), PC8/PC4 (IN1/IN2) |
-| 电机 3 右后 | TIM12_CH2 | PB15 (PWM), PD3/PD4 (IN1/IN2) |
-| 舵机 0 腰座 | TIM1_CH1 | PA8 |
-| 舵机 1 大臂 | TIM1_CH2 | PA9 |
-| 舵机 2 小臂 | TIM9_CH1 | PA2 |
-| 舵机 3 夹爪 | TIM1_CH4 | PA11 |
-| 舵机 4 挂钩 | TIM9_CH2 | PA3 |
-| 编码器 0 左前 | TIM5 | PA0/PA1 |
-| 编码器 1 右前 | TIM2 | PA15/PB3 |
-| 编码器 2 左后 | TIM4 | PB6/PB7 |
-| 编码器 3 右后 | TIM8 | PC6/PC7 |
-| OpenMV | USART3 | PC10(TX), PC11(RX) |
-| 调试串口 | UART5 | PC12(TX), PD2(RX) |
+## 完整作业流程
 
----
-
-## 软件架构
-
-### 模块总览
-
-| 模块 | 文件 | 功能 |
-|------|------|------|
-| 主循环 | `main.c` | 入口 + QR 触发 AI 流水线 + 从车对接状态机 + 串口命令处理 |
-| 巡线控制 | `line_follow.c/h` | 5 路红外传感器 PID 巡线 @ 100Hz ISR |
-| 视觉伺服 | `visual_servo.c/h` | AprilTag 双 PID 精确对接 (横向+纵向解耦) |
-| PID 控制器 | `pid.c/h` | 位置式 + 增量式 PID, 支持积分分离/抗饱和/梯形积分/低通滤波 |
-| 机械臂动作 | `action_group.c/h` | 预编程动作序列 (抓取/放置/复位/挂钩) |
-| 舵机控制 | `servo.c/h` + `smooth_servo.c/h` | PWM 驱动 + 五次样条平滑插值 (jerk-limited) |
-| 命令解析 | `command.c/h` | 串口命令解析器 (~40 条调试命令) |
-| OpenMV 通讯 | `commend_openmv.c/h` | USART3 环形缓冲 + `$TAG`/`$QR`/`$CLS` 协议解析 |
-| 状态机 | `state_machine.c/h` | ArmSM + TaskNav + TaskQueue 三状态机 |
-| 视觉任务 | `vision_task.c/h` | 颜色搜索/QR 搜索/AI 扫描 任务编排 |
-| 电机驱动 | `motor.c/h` | 方向+速度 PWM 输出, 紧急制动 |
-| 编码器 | `enconder.c/h` | 正交解码 + 速度滤波 + 故障检测 |
-| 定时器 | `Timer.c/h` | TIM6 100Hz 系统心跳 + PVD 低压检测 |
-| 串口 | `uart.c/h` | UART5 环形缓冲 + ISR 收发 |
-
-### 中断优先级
-
-| ISR | 优先级 (pre,sub) | 职责 |
-|-----|-----------------|------|
-| PVD_IRQHandler | 0,0 | 低压检测 → 立即制动 |
-| UART5_IRQHandler | 0,0 | 调试串口 RX 环形缓冲 |
-| TIM6_DAC_IRQHandler | 1,0 | **100Hz 控制心跳** |
-| USART3_IRQHandler | 2,0 | OpenMV 数据接收 |
-
----
-
-## 控制系统
-
-### 核心控制循环 (TIM6 ISR @ 100Hz)
-
-系统以 TIM6 100Hz 中断为心跳，每次中断执行：
-1. 编码器速度计算 + 滤波
-2. 根据 `work_mode` 分发控制逻辑
-3. 速度 PID 计算 → PWM 输出
-4. 舵机平滑插值更新
-5. 机械臂状态机计时
-
-### 四级嵌套 PID
-
-```
-位置 PID (20ms, 外环) → 速度 PID (10ms, 内环) → PWM 输出
-                                                      ↑
-                         巡线 PID (10ms, 差速转向修正)
+```mermaid
+flowchart TD
+    A[上电巡线] --> B[十字检测]
+    B --> C[AprilTag 对接]
+    C --> D[挂接从车]
+    D --> E[工位零]
+    E --> F[三件抓取]
+    F --> G[工位一]
+    G --> H[取件交付]
+    H --> I[完成停车]
 ```
 
-### 四种工作模式
+完整流程中，车辆先在十字路口进入从车对接阶段，再由 AprilTag 提供相对位姿信息完成视觉引导。挂接后，二维码触发工位任务；系统按红色六边形、黄色长方形、绿色圆形的顺序处理目标，并在两个工位完成装载与交付。
 
-| 模式 | 值 | 触发方式 | 说明 |
-|------|---|---------|------|
-| `MODE_MANUAL` | 0 | 串口 `mode 0` | 串口直驱 `target_speed[]` |
-| `MODE_LINE_FOLLOW` | 1 | 上电默认 | 巡线传感器 PID, 自主循迹 |
-| `MODE_POSITION` | 2 | 串口 `mode 2` | 编码器位置外环 PID |
-| `MODE_VISUAL_SERVO` | 3 | 串口 `mode 3` | OpenMV 视觉双 PID 对接 |
+当前 `User/main.c` 的默认配置以工位调试为目的，启用 `SKIP_DOCK=1`，从车应在上电前完成手动挂接。自动对接状态机及其现场参数仍保留在工程内，但当前处于调试禁用状态。复现全流程前应恢复已验证的完整配置、检查场地与标记尺寸，并重新烧录后实车测试；不要仅修改一个宏后直接上车运行。
 
-### 巡线 PID 特性
+## 硬件与软件架构
 
-- 5 路传感器加权误差：`{-2, -1, 0, +1, +2}`
-- 传感器消抖：3 帧多数表决
-- 积分分离：|error| > 1.5 时清零积分
-- 梯形积分 + EMA 微分滤波 (70% 旧 + 30% 新)
-- 死区：|error| < 0.1 → 置零
-- 转向输出钳制：±600
-- 速度输出钳制：[0, 1000] (只前进不倒退)
-- 丢线处理：500ms 惯性滑行后停车
-- 弯道检测：≤4 路检测到线连续 3 帧 → `curve_ready` 标志
+### 硬件组成
 
-### 默认控制参数
+| 子系统 | 配置 |
+| --- | --- |
+| 主控 | STM32F407ZGTx，主频 168 MHz |
+| 移动底盘 | 四轮差速底盘，直流减速电机与 PWM 驱动 |
+| 机械执行 | 4-DOF 机械臂，腰座、大臂、小臂、夹爪与独立挂钩舵机 |
+| 视觉 | OpenMV Cam H7 Plus，支持 QR、AprilTag、颜色识别与端侧分类 |
+| 巡线传感 | 5 路红外巡线传感器 |
+| 调试通信 | UART5，115200 8N1，USB-TTL 连接 |
+| 视觉通信 | USART3，115200，与 OpenMV 专用连接 |
 
-| 参数 | 值 | 说明 |
-|------|-----|------|
-| 巡线 base_speed | 180 | 巡线基础速度 |
-| 巡线 Kp/Ki/Kd | 180 / 2.0 / 2.0 | 巡线 PID 增益 |
-| 速度 PID (电机 0,1) | Kp=5.5 Ki=0.16 Kd=0 | 前轮速度环 |
-| 速度 PID (电机 2,3) | Kp=5.0 Ki=0.14 Kd=0 | 后轮速度环 |
-| 位置 PID | Kp=0.5 Ki=0.001 Kd=0 | 位置外环 |
-| 视觉伺服横向 Kp/Ki/Kd | 3.0 / 0.05 / 0.5 | 左右转向 |
-| 视觉伺服纵向 Kp/Ki/Kd | 2.0 / 0.02 / 0.3 | 前后速度 |
-| 视觉伺服目标 | cx=160, dist=15cm | 图像中心 + 15cm 距离 |
+完整引脚映射、外设初始化和中断优先级见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
----
+### 软件分层
 
-## OpenMV 视觉模块
+| 层级 | 主要文件 | 职责 |
+| --- | --- | --- |
+| 实时控制 | `Timer.c`、`pid.c`、`line_follow.c`、`visual_servo.c` | 100 Hz 控制心跳、巡线 PID、位置/速度控制、视觉伺服 |
+| 任务编排 | `main.c`、`state_machine.c`、`vision_task.c` | 从车对接、QR 任务、机械臂状态管理与多步骤任务队列 |
+| 视觉通信 | `commend_openmv.c`、`OpenMV_scripts/main.py` | USART3 环形缓冲、视觉数据协议与相机模式切换 |
+| 机械执行 | `action_group.c`、`servo.c`、`smooth_servo.c` | 抓取、放置、挂钩及平滑舵机轨迹 |
+| 调试接口 | `uart.c`、`command.c` | UART5 命令解析、状态查询与遥测控制 |
 
-### 通讯协议
+系统由 7 个协作状态机组织自主任务，包括机械臂、视觉伺服、视觉任务、任务队列、传统导航、QR 任务流水线和从车对接状态机。
 
-OpenMV 通过 USART3 (115200) 与 STM32 通讯，使用环形缓冲 + ISR 收发模式。
+## 视觉任务
 
-**接收数据包**：
-| 格式 | 说明 |
-|------|------|
-| `$TAG,<id>,<cx>,<cy>,<dist>,<angle>,<w>` | AprilTag/颜色色块 |
-| `$QR,<payload>` | QR 码解码文本 |
-| `$CLS,<class_id>,<confidence>` | AI 分类结果 |
-| `$HB` | 心跳 (活跃检测) |
-| `$OK,BOOT` | AI 模型加载成功 |
-| `$ERR,...` | 错误信息 |
+OpenMV 在 QR、AprilTag、颜色和 AI 分类模式之间切换，通过 USART3 向主控发送识别结果。二维码负责触发任务，AI 分类确定目标类别，颜色追踪用于末端对准，AprilTag 用于从车对接。
 
-**发送指令**：`$CMD,MODE,<mode>\r\n`
+| class_id | 标签 | 颜色目标 |
+| :---: | --- | --- |
+| 0 | `red_hexagon` | 红色六边形 |
+| 1 | `green_circle` | 绿色圆形 |
+| 2 | `yellow_rect` | 黄色长方形 |
 
-### 四种视觉模式
+`OpenMV_scripts/train_mid_f32.py` 可训练并导出当前相机脚本使用的 Float32 MobileNetV2 模型 `model_mid_f32.tflite`。模型文件不随仓库提供；部署时必须使用与 `main.py` 和 `labels.txt` 匹配的模型与标签文件。
 
-| 模式 | 用途 | 数据输出 |
-|------|------|---------|
-| `APRILTAG` | 视觉伺服对接 | `$TAG` (tag_id, cx, cy, dist) |
-| `QRCODE` | 二维码识别 | `$QR` (payload) |
-| `AI` | 端侧 AI 分类 | `$CLS` (class_id, confidence) |
-| `COLOR` | 颜色追踪 | `$TAG` (color_id, cx, cy, dist) |
+## 构建与部署
 
-### AI 模型
+### STM32 固件
 
-- **架构**：MobileNetV2 α=0.35
-- **量化**：INT8 (TFLite)
-- **输入**：64×64 RGB
-- **分类**：3 类
+开发环境为 Keil MDK-ARM V5.06 与 ARM Compiler 5。工程使用 C90 语法，新写的局部变量应在代码块开头声明。
 
-| class_id | 标签 | 颜色 | 对应 COLOR ID |
-|:--:|------|------|:--:|
-| 0 | red_hexagon | 🔴 红色六边形 | 1 |
-| 1 | green_circle | 🟢 绿色圆形 | 2 |
-| 2 | yellow_rect | 🟡 黄色矩形 | 3 |
+1. 打开 `Project/RVMDK（uv5）/SICV_F407.uvprojx`。
+2. 选择目标 `AGV`，确认芯片为 STM32F407ZGTx。
+3. 按 `F7` 编译。
+4. 通过 ST-Link 的 SWD 接口（PA13/PA14）连接开发板，按 `F8` 下载。
+5. 编译产物位于 `Output/LED.axf` 和 `Output/LED.hex`。
 
----
+`keilkill.bat` 会清理构建产物；运行后必须重新执行 `F7`，再执行 `F8` 下载。新增 `User/` 下的 `.c` 或 `.h` 文件后，还需要在 Keil 的 Project Items 中手动加入工程。
 
-## 状态机系统 (7 个)
+### OpenMV 部署
 
-| 状态机 | 运行位置 | 触发方式 | 功能 |
-|--------|---------|---------|------|
-| **ArmSM** | TIM6 ISR (100Hz) | 串口/任务 请求 | 机械臂忙闲锁 + 超时保护 |
-| **VisualServo** | TIM6 ISR (100Hz) | work_mode=3 | 双 PID 视觉对接底层控制 |
-| **AI Pipeline** | 主循环 | QR 触发，且 `dock_state == 5` | QR → 靠近 → AI 分类 → 颜色对准 → 抓取/放置 |
-| **Dock** | 主循环 | 十字路口 + `crossdock` | 右转 → AprilTag 搜索 → 倒车对接 → 挂钩 → 回轨 |
-| **VisionTask** | 主循环 (50ms 节流) | 串口命令 | 颜色/QR/AI 搜索→靠近→执行 |
-| **TaskQueue** | 主循环 | API 调用 | 可编程 N 步骤任务序列 |
-| **TaskNav** | 主循环 (50ms 节流) | 串口 `task_start` | 传统 2 段式 去→抓→回→放 任务 |
+1. 通过 USB 连接 OpenMV H7 Plus。Windows 下通常会挂载为 `H:` 盘。
+2. 将 `OpenMV_scripts/main.py`、`OpenMV_scripts/labels.txt` 和匹配的 `model_mid_f32.tflite` 复制到相机内部 Flash 根目录。
+3. 相机启动后默认进入 QR 模式；STM32 会根据任务切换 QR、AI、COLOR 或 APRILTAG 模式。
 
-### QR 触发 AI 流水线 (核心自主任务)
+若需要重新训练模型，请在具备 TensorFlow 环境的电脑中进入 `OpenMV_scripts/`，运行 `train_mid_f32.py`，再将导出的模型和标签部署到相机。
 
-```
-从车对接完成 (`dock_state == 5`)
-     ↓
-扫描 QR 码 → 解析当前工位任务 → 靠近目标区至约 15cm
-     ↓
-OpenMV AI 分类 → 按 `mission_class[]` 筛选目标 → 切换 COLOR 模式
-     ↓
-腰座比例转向 + 车身微调对准 → 机械臂抓取/放置
-     ↓
-保存并恢复腰座角度 → 下一目标或切回巡线
-```
+### PID Tuner（可选）
 
-### 机械臂状态机 (ArmSM)
+配套调参工具位于 `llm-pid-tuner-dev/`。先将根目录的 `config.example.json` 复制为 `config.json`，填入自己的接口配置；真实配置文件已被 Git 忽略，不应提交到仓库。具体运行方式见 [llm-pid-tuner-dev/README.md](llm-pid-tuner-dev/README.md)。
 
-- **状态**：IDLE → GRASPING/PLACING/RESETTING → IDLE
-- **消抖**：50ms (5 ticks @ 100Hz)
-- **超时**：抓取 30s / 放置 30s / 复位 30s → 自动 ESTOP
-- **互斥**：任何代码调用 `Action_Grasp()`/`Action_Place()` 前必须检查 `ArmSM_IsBusy()`
+## 串口调试
 
-### 舵机平滑插值
+调试串口为 UART5（PC12/PD2，115200 8N1）。启动后的前 3 秒内，命令会执行但不回显，用于抑制 USB-TTL 上电噪声。
 
-- 五次多项式 (quintic) smoothstep：位置/速度/加速度均连续
-- 最大角速度 180°/s，超限自动延长时间
-- 智能断电：到达目标后按关节类型执行不同策略
-  - 大臂 (ID 1)：始终保持通电（抗重力）
-  - 腰座 (ID 0)：到位后永久断电
-  - 小臂 (ID 2)：始终保持通电（抗重力）
-  - 夹爪 (ID 3)：周期通断（通电 500ms → 断电 5s）
+| 命令 | 用途 |
+| --- | --- |
+| `help` | 查看完整命令列表 |
+| `run` / `restart` | 重置自主任务流程并返回巡线 |
+| `flow` | 查看整条任务链路的当前状态 |
+| `crossdock <0|1>` | 开关十字路口自动对接触发 |
+| `dockstat` | 查看从车对接状态 |
+| `vpid` | 查看视觉伺服参数与对准状态 |
+| `vmode <mode>` | 切换 OpenMV 视觉模式 |
+| `vdata` / `vcls` | 查看最新视觉目标或分类结果 |
+| `mode <0|1|2|3>` | 切换手动、巡线、位置或视觉伺服模式 |
+| `stop` | 紧急停车并切换为手动模式 |
 
----
+## 目录结构
 
-## 串口调试系统
-
-40+ 条串口命令，115200 波特率，UART5。启动后前 3 秒静默（抑制 USB-TTL 噪声），之后正常回显。
-
-### 命令分类
-
-| 类别 | 示例命令 |
-|------|---------|
-| 运动 | `spd <L> <R>`, `stop`, `mode <0-3>`, `reset`, `enable <0|1>` |
-| PID 调参 | `kp/ki/kd <id> <val>`, `lkp/lki/lkd <val>`, `pos_kp/pos_ki/pos_kd <val>` |
-| 编码器 | `enc_pos`, `enc_speed`, `enc_max`, `enc_dir`, `enc_clear` |
-| 舵机 | `servo <id> <angle>`, `servo_on/off`, `a_set <id> <angle>` |
-| 机械臂 | `grasp`, `place <waist>`, `reset_arm`, `show` |
-| OpenMV | `vmode <mode>`, `vcolor <id>`, `vtag <id>`, `vqr`, `vdata`, `vcls` |
-| 任务 | `task_start`, `task_stop`, `task_status` |
-| 系统 | `help`, `save`/`load` (预留 EEPROM 接口) |
-
----
-
-## 项目目录结构
-
-```
-├── User/                    # STM32 应用层全部源码
-│   ├── main.c               # 入口 + QR AI 流水线 + 从车对接状态机
-│   ├── line_follow.c/h      # 巡线 PID
-│   ├── visual_servo.c/h     # 视觉伺服双 PID
-│   ├── pid.c/h               # PID 控制器库
-│   ├── action_group.c/h     # 机械臂动作序列
-│   ├── command.c/h          # 串口命令解析
-│   ├── commend_openmv.c/h   # OpenMV 通讯协议
-│   ├── state_machine.c/h    # ArmSM / TaskNav / TaskQueue
-│   ├── vision_task.c/h      # 视觉任务编排
-│   ├── servo.c/h            # 舵机 PWM 驱动
-│   ├── smooth_servo.c/h     # 五次样条平滑插值
-│   ├── motor.c/h            # 电机驱动
-│   ├── enconder.c/h         # 编码器 (正交解码 + 速度滤波)
-│   ├── pwm.c/h              # PWM 初始化 (TIM1/3/9/12)
-│   ├── uart.c/h             # UART5 环形缓冲
-│   ├── Timer.c/h            # TIM6 100Hz ISR + PVD
-│   ├── sys.c/h              # NVIC 配置
-│   ├── DELAY.c/h            # SysTick 阻塞/非阻塞延时
-│   ├── arm_config.h         # 机械臂零点配置
-│   └── stm32f4xx_it.c/h     # 中断服务覆盖
-│
-├── OpenMV_scripts/          # OpenMV 视觉模块
-│   ├── main.py              # 多模式固件 (AprilTag/QR/AI/Color)
-│   ├── train_mid.py         # MobileNetV2 α=0.35 INT8 训练脚本
-│   ├── train_small.py       # 轻量 CNN 训练脚本 (内存友好)
-│   ├── train.py             # 原始训练脚本
-│   ├── labels.txt           # 类别标签
-│   └── dataset/             # 三分类训练数据集
-│
-├── Project/                 # Keil MDK 工程文件
-│   └── RVMDK（uv5）/SICV_F407.uvprojx
-│
-├── hardware/hook/           # 从车挂钩 CAD/STL 与生成脚本
-├── llm-pid-tuner-dev/       # 串口 CSV + LLM PID 调参工具
-├── config.example.json       # PID Tuner 公开配置模板
-│
-└── Libraries/               # 官方库 (只读)
-    ├── CMSIS/               # ARM Cortex-M4 CMSIS
-    └── STM32F4xx_StdPeriph_Driver/  # ST 标准外设库
+```text
+.
+├── User/                         # STM32 应用层源码
+│   ├── main.c                    # 主循环、任务流程与对接编排
+│   ├── line_follow.c/h           # 巡线控制
+│   ├── visual_servo.c/h          # AprilTag 视觉伺服
+│   ├── state_machine.c/h         # 机械臂与任务状态机
+│   ├── command.c/h               # 串口命令解析
+│   └── commend_openmv.c/h        # OpenMV 通信协议
+├── OpenMV_scripts/               # 相机脚本、训练脚本、标签与数据集
+├── Project/RVMDK（uv5）/          # Keil 工程
+├── Libraries/                    # CMSIS 与 STM32 标准外设库
+├── llm-pid-tuner-dev/            # 可选 PID 自动调参工具
+├── Output/                       # Keil 构建产物
+├── ARCHITECTURE.md                # 完整硬件与软件架构参考
+└── READY.md                       # 实机调试记录与待办
 ```
 
----
+## 安全说明
 
-## 开发环境
+- 首次烧录或更改运动、视觉、机械臂参数后，应先将车辆架空或在可控场地单独验证，再进行整流程演示。
+- `stop`、低压制动、机械臂动作超时和视觉目标丢失保护用于降低风险，但不能替代现场监护。
+- 公开仓库仅提供 `config.example.json`；请自行创建本地 `config.json`，并妥善保管 API Key、设备端模型和本机串口配置。
 
-| 项目 | 版本/工具 |
-|------|----------|
-| IDE | Keil MDK-ARM V5.06 |
-| 编译器 | ARM Compiler 5 (C90) |
-| MCU | STM32F407ZGTx, 168MHz |
-| 下载器 | ST-Link V2 (SWD: PA13/PA14) |
-| 串口终端 | 115200 baud, 8N1 |
-| OpenMV IDE | OpenMV Cam H7 Plus 固件 |
+## 参考文档
 
-**编译流程**：Keil 打开 `Project/RVMDK（uv5）/SICV_F407.uvprojx` → F7 编译 → F8 下载。
-
-### PID Tuner 配置
-
-可选的 PID 调参工具位于 `llm-pid-tuner-dev/`。使用前将根目录的 `config.example.json` 复制为 `config.json`，填入自己的 API Key；实际配置已被 Git 忽略，不会上传。
-
----
-
-## 关键设计特性
-
-### 安全性
-- **PVD 低压检测** (2.9V)：最高优先级中断，自动紧急制动
-- **机械臂超时保护**：30s 动作超时自动 ESTOP
-- **丢标签停车**：视觉伺服 1s 内无数据自动停车
-- **启动安全**：上电立即紧急制动，防止 GPIO 浮空导致电机误动
-- **编码器故障检测**：delta > 10× 最大值连续 10 次 → 强制重同步
-
-### 实时性
-- **100Hz 控制心跳**：TIM6 中断驱动，10ms 周期
-- **环形缓冲**：UART5 + USART3 均使用 ISR 写 + 主循环读的环形缓冲，杜绝丢包
-- **非阻塞延时**：`Delay_Start()`/`Delay_Check()` 模式支持非阻塞等待
-
-### 独创性
-- **腰座比例转向**：AI 对准阶段用腰座舵机而非差速转向，精度更高
-- **五次样条舵机插值**：位置/速度/加速度三阶连续，无冲击
-- **LLM PID Tuner 框架**：CSV 遥测 → LLM 自动调参（Python 配套工具）
-
----
-
-## 快速开始
-
-### 烧录运行
-1. Keil 打开 `Project/RVMDK（uv5）/SICV_F407.uvprojx`
-2. F7 编译，F8 下载到 STM32F407
-3. 上电自动开跑整流程：巡线 → **十字路口对接**（自动右拐+AprilTag 倒车挂钩）→ Station 0 抓 3 件放从车 → Station 1 从车取件交付 → LED 三闪完成
-4. 串口连接 (115200)，等待 3 秒后发送 `help` 查看命令列表
-
-### 常用操作
-```bash
-help          # 查看全部命令
-run           # 一键重置并重跑整流程 (等价 restart)
-crossdock 0|1 # 开关十字路口自动对接 (boot 默认 1)
-dockstat      # 查看对接状态机状态
-vpid          # 查看视觉伺服 PID 参数
-mode 1        # 切换到巡线模式
-mode 3        # 切换到视觉伺服模式
-grasp         # 手动抓取
-stop          # 紧急停车
-```
-
----
-
-## 演示视频
-
-链接待补充（B站 / 视频文件）
+- [ARCHITECTURE.md](ARCHITECTURE.md)：硬件引脚、控制链路、通信协议和状态机细节。
+- [READY.md](READY.md)：实机调试记录、从车对接参数和后续计划。
+- [llm-pid-tuner-dev/README.md](llm-pid-tuner-dev/README.md)：PID Tuner 的安装与使用说明。
