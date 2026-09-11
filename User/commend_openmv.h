@@ -56,6 +56,10 @@ void OpenMV_FlushRx(void);
 /* 获取最新视觉数据 (拷贝后清除 fresh 标志), 返回 1=有效 */
 int OpenMV_GetData(OpenMV_Data *out);
 
+/* 偷看最新视觉数据 (拷贝但不清除 fresh 标志), 返回 1=有效
+ * 用于遥测等只读场合, 避免抢走主循环/状态机的数据 */
+int OpenMV_PeekData(OpenMV_Data *out);
+
 /* 查询是否有新数据 */
 int OpenMV_IsFresh(void);
 
@@ -91,6 +95,7 @@ typedef struct {
     uint8_t  fresh;
     int16_t  class_id;      /* -1 = 不确定, 0~N = 类别ID */
     uint8_t  confidence;    /* 0~100 置信度百分比 */
+    uint8_t  score[3];      /* 三类原始分数 0~100, 调试用 */
 } OpenMV_CLSData;
 
 /* 获取 AI 分类结果 (拷贝后清除 fresh), 返回 1=有效 */

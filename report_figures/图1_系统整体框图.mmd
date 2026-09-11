@@ -1,0 +1,40 @@
+graph TB
+    subgraph 感知层["感知层"]
+        OMV["OpenMV 摄像头<br/>AprilTag/QR/AI分类"]
+        LS["5路巡线传感器<br/>PC0-PC3, PA4"]
+        ENC["编码器×4<br/>(3路有效)"]
+    end
+
+    subgraph 决策层["决策层 — STM32F407 168MHz"]
+        TIM6["TIM6 100Hz 主控心跳"]
+        subgraph 控制环路["控制环路"]
+            LF["巡线PID<br/>10ms"]
+            POS["位置PID<br/>20ms"]
+            VS["视觉伺服双PID<br/>100Hz"]
+        end
+        subgraph 状态机["状态机调度"]
+            AI["AI自动扫描Pipeline"]
+            TQ["TaskQueue"]
+            VT["VisionTask"]
+            ARM["ArmSM"]
+        end
+    end
+
+    subgraph 执行层["执行层"]
+        MTR["4路直流电机<br/>PWM 1kHz ±1000"]
+        SRV["3路舵机<br/>腰座/大臂/小臂 50Hz"]
+        DBG["UART5调试串口<br/>+ LLM PID Tuner"]
+    end
+
+    OMV -->|"USART3 115200"| TIM6
+    LS -->|"GPIO输入"| LF
+    ENC -->|"TIM2/4/5/8"| POS
+    LF --> MTR
+    POS --> MTR
+    VS --> MTR
+    TIM6 --> SRV
+    TIM6 --> DBG
+    AI --> TIM6
+    TQ --> TIM6
+    VT --> TIM6
+    ARM --> TIM6

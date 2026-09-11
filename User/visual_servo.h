@@ -73,6 +73,10 @@ void VisualServo_Reset(VisualServo_Handle *vs);
 void VisualServo_Task(VisualServo_Handle *vs,
     const OpenMV_Data *omv, volatile int16_t target_speed[4]);
 
+/* 视觉伺服倒车版 (从车对接用): 同 PID 逻辑, 输出取反 = 倒车靠近 */
+void VisualServo_TaskReverse(VisualServo_Handle *vs,
+    const OpenMV_Data *omv, volatile int16_t target_speed[4]);
+
 /* 查询是否对准 */
 int VisualServo_IsAligned(const VisualServo_Handle *vs);
 

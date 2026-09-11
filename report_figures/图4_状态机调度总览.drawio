@@ -1,0 +1,91 @@
+<mxfile host="Electron" agent="Python">
+  <diagram id="diag" name="状态机调度总览">
+    <mxGraphModel dx="1100" dy="650" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="580" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Microsoft YaHei;fontSize=16;fontColor=#2C3E50;fontStyle=1;" value="图4  状态机调度总览（6状态机 × 2运行上下文）" vertex="1">
+          <mxGeometry height="30" width="600" x="250" y="5" as="geometry" />
+        </mxCell>
+
+        <!-- main() 主循环 区域 -->
+        <mxCell id="band_main" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=6;fontFamily=Microsoft YaHei;fontSize=10;align=left;verticalAlign=bottom;fillColor=#EBF5FB;strokeColor=#2471A3;strokeWidth=1.5;fontStyle=1;dashed=1;" value="main() 主循环 (非实时)" vertex="1">
+          <mxGeometry height="200" width="800" x="40" y="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ai_pipe" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=11;align=center;verticalAlign=middle;fillColor=#D5F5E3;strokeColor=#1E8449;strokeWidth=2;fontColor=#145A32;fontStyle=1;" value="&lt;b&gt;AI Pipeline&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;Phase 0→1→2→3&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;自动周期触发  15s冷却&lt;/font&gt;" vertex="1">
+          <mxGeometry height="65" width="230" x="60" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="tq" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=11;align=center;verticalAlign=middle;fillColor=#D5F5E3;strokeColor=#1E8449;strokeWidth=2;fontColor=#145A32;fontStyle=1;" value="&lt;b&gt;TaskQueue&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;≤16步脚本化任务链&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;巡线→对接→动作  逐级超时&lt;/font&gt;" vertex="1">
+          <mxGeometry height="65" width="250" x="320" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="vt_tn" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=11;align=center;verticalAlign=middle;fillColor=#D5F5E3;strokeColor=#1E8449;strokeWidth=2;fontColor=#145A32;fontStyle=1;" value="&lt;b&gt;VisionTask + TaskNav&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;颜色/QR/AI搜索  50ms节流&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;TaskNav: 遗留go-grasp-place&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="500" x="170" y="170" as="geometry" />
+        </mxCell>
+
+        <!-- TIM6 ISR 区域 -->
+        <mxCell id="band_isr" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=6;fontFamily=Microsoft YaHei;fontSize=10;align=left;verticalAlign=bottom;fillColor=#E8F8F5;strokeColor=#1E8449;strokeWidth=1.5;fontStyle=1;dashed=1;" value="TIM6 ISR (100Hz 硬实时)" vertex="1">
+          <mxGeometry height="200" width="800" x="40" y="280" as="geometry" />
+        </mxCell>
+
+        <mxCell id="arm_sm" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=11;align=center;verticalAlign=middle;fillColor=#D6EAF8;strokeColor=#2471A3;strokeWidth=2;fontColor=#1A5276;fontStyle=1;" value="&lt;b&gt;ArmSM&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;机械臂互斥锁&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;50ms去抖 + 30s超时&lt;/font&gt;" vertex="1">
+          <mxGeometry height="65" width="230" x="60" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="vs" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=11;align=center;verticalAlign=middle;fillColor=#D6EAF8;strokeColor=#2471A3;strokeWidth=2;fontColor=#1A5276;fontStyle=1;" value="&lt;b&gt;VisualServo&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;双PID Tag对接&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;横向P + 纵向PID  200ms丢标停车&lt;/font&gt;" vertex="1">
+          <mxGeometry height="65" width="250" x="320" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="line_f" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=11;align=center;verticalAlign=middle;fillColor=#FCF3CF;strokeColor=#D4AC0D;strokeWidth=2;fontColor=#7D6608;fontStyle=1;" value="&lt;b&gt;巡线PID&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;传感器→转向→速度&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;line_time定时停车  曲线计数&lt;/font&gt;" vertex="1">
+          <mxGeometry height="65" width="230" x="60" y="400" as="geometry" />
+        </mxCell>
+
+        <!-- 触发源 区域 -->
+        <mxCell id="band_trig" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=6;fontFamily=Microsoft YaHei;fontSize=10;align=left;verticalAlign=bottom;fillColor=#FEF9E7;strokeColor=#D4AC0D;strokeWidth=1.5;fontStyle=1;dashed=1;" value="触发源" vertex="1">
+          <mxGeometry height="430" width="200" x="870" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="t_uart" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=11;align=center;verticalAlign=middle;fillColor=#D1F2EB;strokeColor=#117A65;strokeWidth=2;fontColor=#0B5345;fontStyle=1;" value="&lt;b&gt;UART5 串口命令&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;50+ 调试命令&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;手动触发各任务&lt;/font&gt;" vertex="1">
+          <mxGeometry height="65" width="180" x="880" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="t_cross" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=11;align=center;verticalAlign=middle;fillColor=#FCF3CF;strokeColor=#D4AC0D;strokeWidth=2;fontColor=#7D6608;fontStyle=1;" value="&lt;b&gt;十字路口检测&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;5路全踩→触发对接&lt;/font&gt;" vertex="1">
+          <mxGeometry height="55" width="180" x="880" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="t_timer" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=11;align=center;verticalAlign=middle;fillColor=#D6EAF8;strokeColor=#2471A3;strokeWidth=2;fontColor=#1A5276;fontStyle=1;" value="&lt;b&gt;15s周期定时&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;自动冷却触发AI&lt;/font&gt;" vertex="1">
+          <mxGeometry height="55" width="180" x="880" y="320" as="geometry" />
+        </mxCell>
+
+        <!-- 箭头：主循环内部 -->
+        <mxCell id="a_ai_tq" edge="1" parent="1" source="ai_pipe" target="tq" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#1E8449;strokeWidth=1.5;" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 箭头：触发源→状态机 -->
+        <mxCell id="a_timer" edge="1" parent="1" source="t_timer" target="ai_pipe" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2471A3;strokeWidth=2;dashed=1;fontSize=11;fontStyle=1;labelBackgroundColor=#FFFFFF;" value="触发AI扫描">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="850" y="347" />
+              <mxPoint x="850" y="265" />
+              <mxPoint x="30" y="265" />
+              <mxPoint x="30" y="122" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a_cross" edge="1" parent="1" source="t_cross" target="tq" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#D4AC0D;strokeWidth=2;dashed=1;fontSize=11;fontStyle=1;labelBackgroundColor=#FFFFFF;" value="触发对接任务">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="850" y="260" />
+              <mxPoint x="445" y="260" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a_uart_tq" edge="1" parent="1" source="t_uart" target="tq" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#117A65;strokeWidth=2;dashed=1;" value="手动启动">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 图例 -->
+        <mxCell id="legend" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=6;fontFamily=Microsoft YaHei;fontSize=9;align=left;verticalAlign=middle;fillColor=#F8F9F9;strokeColor=#BDC3C7;strokeWidth=1;" value="&lt;b&gt;图例&lt;/b&gt;&lt;br&gt;蓝色背景: main()软实时&lt;br&gt;绿色背景: TIM6硬实时&lt;br&gt;虚线: 事件触发" vertex="1">
+          <mxGeometry height="55" width="150" x="880" y="420" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

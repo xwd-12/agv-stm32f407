@@ -1,3 +1,0 @@
-red_hexagon
-green_circle
-yellow_rect

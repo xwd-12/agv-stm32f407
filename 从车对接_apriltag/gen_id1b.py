@@ -1,0 +1,45 @@
+# 生成 ID=1 的 10x10 原始图 (白边1 + 黑框1 + 数据6), 然后放大并检测验证
+import numpy as np
+from PIL import Image
+import pupil_apriltags as p
+import os
+
+codes = {
+    1: 0x0000000d97f18b49,
+    2: 0x0000000dd280910e,
+    3: 0x0000000e479e9c98,
+}
+
+def render10(code):
+    # 规则 (0,0,1,1): 行正序,列正序,bit0=右下,bit=1->白
+    # 布局: 白边1 + 黑框1 + 6x6数据 + 黑框1 + 白边1 = 10x10
+    g = np.full((10, 10), 255, dtype=np.uint8)  # 白底
+    g[1:9, 1:9] = 0                              # 黑框
+    for i in range(36):
+        r = i // 6
+        c = i % 6
+        bit = (code >> i) & 1
+        g[2 + r, 2 + c] = 255 if bit else 0      # bit=1 -> 白
+    return g
+
+outdir = r'E:\STM32F4AGV智能搬运机器人 - 副本\从车对接_apriltag'
+det = p.Detector(families='tag36h11')
+
+# 验证 ID2: 渲染结果应和官方 tag36_11_00002.png 一致
+g2 = render10(codes[2])
+ref = np.array(Image.open(os.path.join(d := r'E:\STM32F4AGV智能搬运机器人 - 副本\apriltags', 'tag36_11_00002.png')).convert('L'))
+print('ID2 render == official:', np.array_equal(g2, ref))
+
+# 放大检测
+big = np.kron(g2, np.ones((50, 50), dtype=np.uint8)).astype(np.uint8)
+tags = det.detect(big)
+print('ID2 scaled detect:', [t.tag_id for t in tags])
+
+# 生成 ID1
+g1 = render10(codes[1])
+big1 = np.kron(g1, np.ones((50, 50), dtype=np.uint8)).astype(np.uint8)
+tags1 = det.detect(big1)
+print('ID1 scaled detect:', [t.tag_id for t in tags1])
+if tags1 and tags1[0].tag_id == 1:
+    Image.fromarray(g1).resize((500, 500), Image.NEAREST).save(os.path.join(outdir, 'tag36h11_id1_50mm.png'))
+    print('SAVED tag36h11_id1_50mm.png (500x500)')

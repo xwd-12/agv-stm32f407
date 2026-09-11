@@ -6,6 +6,7 @@ __weak void Save_parameters(void);
 void command_init(void);
 void Commend_Parse(char*cmd);
 void sendPIDDataToUART(void);
+void sendVisualServoTelemetry(void);
 int parseAndUpdatePID(const char *cmd);
 
 extern volatile uint32_t g_sys_tick;

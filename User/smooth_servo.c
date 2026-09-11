@@ -5,14 +5,13 @@
 #include "arm_config.h"
 
 #define SMOOTH_SERVO_NUM  5
-#define MAX_ANGULAR_VEL   180.0f   // 最大角速度(度/秒), 五次多项式峰值约为平均值1.875倍
-
-// 间歇保持: 到位后关断避免死区振荡, 周期性短暂上电修正下垂
-#define HOLD_TICKS   50   // 到位后保持 500ms
+#define MAX_ANGULAR_VEL   180.0f   // 最大角速度(�?�?, 五次多项式峰值约为平均�?.875�?
+// 间歇保持: 到位后关断避免死区振�? 周期性短暂上电修正下�
+#define HOLD_TICKS   50   // 到位后保�?500ms
 #define OFF_TICKS    500  // 关断 5s
 #define ON_TICKS      50  // 上电 500ms 修正下垂
 
-// 状态枚举
+// 状态枚�
 typedef enum {
     SS_IDLE = 0,
     SS_MOVING,
@@ -25,7 +24,7 @@ static float      start_angle[SMOOTH_SERVO_NUM];
 static int32_t    steps_total[SMOOTH_SERVO_NUM];
 static int32_t    steps_elapsed[SMOOTH_SERVO_NUM];
 static SmoothState state[SMOOTH_SERVO_NUM];
-static int16_t    idle_timer[SMOOTH_SERVO_NUM];  // 间歇计时器
+static int16_t    idle_timer[SMOOTH_SERVO_NUM];  // 间歇计时�
 static uint8_t    idle_phase[SMOOTH_SERVO_NUM];  // 0=保持(ON), 1=关断(OFF)
 
 void smooth_Init(void)
@@ -36,19 +35,19 @@ void smooth_Init(void)
         target_angle[i]  = 90.0f;
         start_angle[i]   = 90.0f;
     }
-    // 同步 Servo_Init 的初始位置
+    // 同步 Servo_Init 的初始位�
     current_angle[0] = (float)ARM_HOME_WAIST;    target_angle[0] = (float)ARM_HOME_WAIST;
     current_angle[1] = (float)ARM_HOME_SHOULDER; target_angle[1] = (float)ARM_HOME_SHOULDER;
     current_angle[2] = (float)ARM_HOME_ELBOW;    target_angle[2] = (float)ARM_HOME_ELBOW;
     current_angle[3] = (float)ARM_HOME_GRIPPER;  target_angle[3] = (float)ARM_HOME_GRIPPER;
-    current_angle[4] = (float)ARM_HOME_HOOK;     target_angle[4] = (float)ARM_HOME_HOOK;
+    current_angle[4] = (float)ARM_HOME_HOOK;    target_angle[4] = (float)ARM_HOME_HOOK;    /* �ϵ繳�ӹ�ס(10������), �ֶ��Һôӳ����� */ /* 上电挂钩解锁 */
     for (i = 0; i < SMOOTH_SERVO_NUM; i++) {
         steps_total[i]   = 0;
         steps_elapsed[i] = 0;
         state[i]         = SS_IDLE;
         idle_timer[i]    = HOLD_TICKS;
         idle_phase[i]    = 0;
-        // 物理位置由 Servo_Init + Action_Reset 接管, 这里不写 PWM
+        // 物理位置�?Servo_Init + Action_Reset 接管, 这里不写 PWM
     }
 }
 
@@ -64,13 +63,18 @@ int16_t smooth_Settarget(uint8_t id, uint16_t target_deg, uint16_t time_ms)
         return 0;
 
     // 急停状态拒绝新指令
-    if (state[id] == SS_ESTOP)
-        return -1;
+    if (state[id] == SS_ESTOP) {
+        state[id] = SS_IDLE;
+        idle_phase[id] = 0;
+        idle_timer[id] = HOLD_TICKS;
+        steps_elapsed[id] = 0;
+        steps_total[id] = 0;
+    }
 
     target_angle[id] = (float)target_deg;
     total_distance   = target_angle[id] - current_angle[id];
 
-    // 已在目标位置(误差<0.5度): 跳过运动，直接回IDLE
+    // 已在目标位置(误差<0.5�?: 跳过运动，直接回IDLE
     {
         float d = total_distance;
         if (d < 0.0f) d = -d;
@@ -145,7 +149,7 @@ void smoothservo_EmergencyStop(void)
     }
 }
 
-/* 停止单个通道的平滑运动，回到IDLE状态 */
+/* 停止单个通道的平滑运动，回到IDLE状�?*/
 void smoothservo_StopOne(uint8_t id)
 {
     if (id >= SMOOTH_SERVO_NUM)
@@ -163,37 +167,9 @@ void smoothservo_TimerHandle(void)
     int i;
     for (i = 0; i < SMOOTH_SERVO_NUM; i++) {
         if (state[i] == SS_MOVING) {
-            // 运动中: 插值更新
-        } else if (state[i] == SS_IDLE) {
-            // 大臂(ID=1)+小臂(ID=2)一直供电
-            if (i == 1 || i == 2) {
-                continue;
-            }
-            if (i == 3 && idle_phase[i] == 1) {
-                continue;
-            }
-            // 腰座(ID=0)+挂钩(ID=4): 到位后断电永久保持
-            if ((i == 0 || i == 4) && idle_phase[i] == 1) {
-                continue;
-            }
-            if (--idle_timer[i] <= 0) {
-                if (idle_phase[i] == 0) {
-                    Servo_PWMEnable(i, 0);
-                    if (i == 0 || i == 4) {
-                        idle_timer[i] = 0x7FFF;   // 腰座永久断电
-                    } else {
-                        idle_phase[i] = 1;
-                        idle_timer[i] = OFF_TICKS;
-                    }
-                } else {
-                    Servo_SetAngle(i, (uint16_t)current_angle[i]);
-                    Servo_PWMEnable(i, 1);
-                    idle_phase[i] = 0;
-                    idle_timer[i] = ON_TICKS;
-                }
-            }
-            continue;
+            // 运动�? 插值更�
         } else {
+            /* power-off management removed: all servos stay powered when idle */
             continue;
         }
 
@@ -205,9 +181,9 @@ void smoothservo_TimerHandle(void)
             Servo_SetAngle(i, (uint16_t)current_angle[i]);
             state[i]         = SS_IDLE;
             idle_phase[i]    = 0;
-            idle_timer[i]    = HOLD_TICKS;  // 先保持500ms再关断
+            idle_timer[i]    = HOLD_TICKS;  // 先保�?00ms再关�
         } else {
-            // 五次多项式 smoothstep: 速度/加速度在起止点均为0
+            // 五次多项�?smoothstep: 速度/加速度在起止点均为0
             float t = (float)steps_elapsed[i] / (float)steps_total[i];
             float t3 = t * t * t;
             float eased = t3 * (t * (t * 6.0f - 15.0f) + 10.0f);

@@ -8,7 +8,7 @@ void Motor_EmergencyBrake(void)
     GPIO_InitTypeDef GPIO_InitStruct;
     int i;
 
-    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOE | RCC_AHB1Periph_GPIOC | RCC_AHB1Periph_GPIOD, ENABLE);
+    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOE | RCC_AHB1Periph_GPIOC | RCC_AHB1Periph_GPIOD | RCC_AHB1Periph_GPIOB, ENABLE);
 
     GPIO_InitStruct.GPIO_Mode = GPIO_Mode_OUT;
     GPIO_InitStruct.GPIO_OType = GPIO_OType_PP;
@@ -22,11 +22,11 @@ void Motor_EmergencyBrake(void)
         GPIO_WriteBit(GPIOE, (1 << i), Bit_RESET);
     }
 
-    // PC8, PC4
-    GPIO_InitStruct.GPIO_Pin = GPIO_Pin_8 | GPIO_Pin_4;
-    GPIO_Init(GPIOC, &GPIO_InitStruct);
-    GPIO_WriteBit(GPIOC, GPIO_Pin_8, Bit_RESET);
-    GPIO_WriteBit(GPIOC, GPIO_Pin_4, Bit_RESET);
+    // PB10, PB11 (��� IN1/IN2)
+    GPIO_InitStruct.GPIO_Pin = GPIO_Pin_10 | GPIO_Pin_11;
+    GPIO_Init(GPIOB, &GPIO_InitStruct);
+    GPIO_WriteBit(GPIOB, GPIO_Pin_10, Bit_RESET);
+    GPIO_WriteBit(GPIOB, GPIO_Pin_11, Bit_RESET);
 
     // PD3, PD4
     GPIO_InitStruct.GPIO_Pin = GPIO_Pin_3 | GPIO_Pin_4;
@@ -34,20 +34,20 @@ void Motor_EmergencyBrake(void)
     GPIO_WriteBit(GPIOD, GPIO_Pin_3, Bit_RESET);
     GPIO_WriteBit(GPIOD, GPIO_Pin_4, Bit_RESET);
 }
-//�������
+//�������?
 
 // ���巽�����Ŷ�Ӧ�� GPIO �˿ں�����
-static GPIO_TypeDef* const IN1_PORT[] = {GPIOE, GPIOE, GPIOC, GPIOD};
-static const uint16_t IN1_PIN[] = {GPIO_Pin_3, GPIO_Pin_5, GPIO_Pin_8, GPIO_Pin_3};
-static GPIO_TypeDef* const IN2_PORT[] = {GPIOE, GPIOE, GPIOC, GPIOD};
-static const uint16_t IN2_PIN[] = {GPIO_Pin_4, GPIO_Pin_6, GPIO_Pin_4, GPIO_Pin_4};
+static GPIO_TypeDef* const IN1_PORT[] = {GPIOE, GPIOE, GPIOB, GPIOD};
+static const uint16_t IN1_PIN[] = {GPIO_Pin_3, GPIO_Pin_5, GPIO_Pin_10, GPIO_Pin_3};
+static GPIO_TypeDef* const IN2_PORT[] = {GPIOE, GPIOE, GPIOB, GPIOD};
+static const uint16_t IN2_PIN[] = {GPIO_Pin_4, GPIO_Pin_6, GPIO_Pin_11, GPIO_Pin_4};
 
 void Motor_Init(void)
 {
 	  GPIO_InitTypeDef GPIO_InitStruct;
 	   int i;
     // ʹ�� GPIO ʱ��
-    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOE | RCC_AHB1Periph_GPIOC | RCC_AHB1Periph_GPIOD, ENABLE);
+    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOE | RCC_AHB1Periph_GPIOC | RCC_AHB1Periph_GPIOD | RCC_AHB1Periph_GPIOB, ENABLE);
 
     
     GPIO_InitStruct.GPIO_Mode = GPIO_Mode_OUT;
@@ -67,7 +67,7 @@ void Motor_Init(void)
         GPIO_WriteBit(IN2_PORT[i], IN2_PIN[i], Bit_RESET);
     }
 }
-//����ָ��������ٶȺͷ���
+//����ָ��������ٶȺͷ���?
 void Motor_SetSpeed(uint8_t id, int16_t speed)
 {
 	  uint32_t duty = 0;

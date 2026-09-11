@@ -2,9 +2,9 @@
 #include "pwm.h"
 #include "arm_config.h"
 
-/* 计算舵机脉冲: angle 0-180 → 500-2500us */
+/* 计算舵机脉冲: angle 0-180 �?500-2500us */
 #define SERVO_PULSE(a)  (uint32_t)(500 + ((a) * 2000UL) / 180)
-//���pwm���
+//���pwm���?
 //�ĸ����ӵ����Ӧ���ĸ�pwmͨ��
 void  Pwm_TIM_Init(void)
 {
@@ -29,8 +29,9 @@ void  Pwm_TIM_Init(void)
 		GPIO_Init(GPIOA,&GPIOinitstrcture);
     GPIO_PinAFConfig(GPIOA,GPIO_PinSource7,GPIO_AF_TIM3);
 
-	 GPIOinitstrcture.GPIO_Pin = GPIO_Pin_1;//PB1 = TIM3_CH4, 左后轮PWM
+	 GPIOinitstrcture.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1;//PB0+PB1 dual out, 左后轮PWM
 		GPIO_Init(GPIOB,&GPIOinitstrcture);
+    GPIO_PinAFConfig(GPIOB,GPIO_PinSource0,GPIO_AF_TIM3);
     GPIO_PinAFConfig(GPIOB,GPIO_PinSource1,GPIO_AF_TIM3);
 
 		GPIOinitstrcture.GPIO_Pin = GPIO_Pin_15;//pb15�Һ���
@@ -42,13 +43,13 @@ void  Pwm_TIM_Init(void)
 	//APB1ʱ��Ϊ42hz������tim��ʱ��Ƶ��*2
 	TIM_structure.TIM_ClockDivision = TIM_CKD_DIV1;
 	TIM_structure.TIM_CounterMode =TIM_CounterMode_Up ;//���ϼ���ģʽ
-	TIM_structure.TIM_Period = 1000-1;//��װֵ1000, 分辨率0~999
+	TIM_structure.TIM_Period = 1000-1;//��װֵ1000, 分辨�?~999
 	TIM_structure.TIM_Prescaler =84-1 ;//psc, PWM频率=84MHz/(84*1000)=1kHz
 	TIM_structure.TIM_RepetitionCounter = 0;
 	TIM_TimeBaseInit(TIM3,&TIM_structure);
 
 	TIM_OCStructInit(&OC_Structure);//�ṹ�����г�Ա��ʼ�����ã����ⲻ��Ҫ���õĳ�Ա��bug
-	OC_Structure.TIM_OCMode=TIM_OCMode_PWM1;//���ģʽѡ�� ���� �м� pwm1 pwm2
+	OC_Structure.TIM_OCMode=TIM_OCMode_PWM1;//���ģʽѡ��?���� �м� pwm1 pwm2
 	OC_Structure.TIM_OCPolarity=TIM_OCPolarity_High;//��ƽ���Է�ת����
 	OC_Structure.TIM_OutputState=ENABLE;
 	OC_Structure.TIM_Pulse = 0;//����ccr
@@ -59,6 +60,9 @@ void  Pwm_TIM_Init(void)
 	TIM_OC2Init(TIM3,&OC_Structure);
 	TIM_OC2PolarityConfig(TIM3,TIM_OCPolarity_High);
 	TIM_OC2PreloadConfig(TIM3, TIM_OCPreload_Enable);   // ����һ��һ��TIM_OC2PreloadConfig(TIM3, TIM_OCPreload_Enable);
+    TIM_OC3Init(TIM3,&OC_Structure);
+    TIM_OC3PolarityConfig(TIM3,TIM_OCPolarity_High);
+    TIM_OC3PreloadConfig(TIM3, TIM_OCPreload_Enable);
     TIM_OC4Init(TIM3,&OC_Structure);
     TIM_OC4PolarityConfig(TIM3,TIM_OCPolarity_High);
     TIM_OC4PreloadConfig(TIM3,TIM_OCPreload_Enable);
@@ -108,7 +112,7 @@ static void  	Servoshoulder_Init(void)//Tim1_1,2   pa8,9
 	TIM_TimeBaseInit(TIM1,&TIM_structure);
 
 	TIM_OCStructInit(&OC_Structure);//�ṹ�����г�Ա��ʼ�����ã����ⲻ��Ҫ���õĳ�Ա��bug
-	OC_Structure.TIM_OCMode=TIM_OCMode_PWM1;//���ģʽѡ�� ���� �м� pwm1 pwm2
+	OC_Structure.TIM_OCMode=TIM_OCMode_PWM1;//���ģʽѡ��?���� �м� pwm1 pwm2
 	OC_Structure.TIM_OCPolarity=TIM_OCPolarity_High;//��ƽ���Է�ת����
 	OC_Structure.TIM_OutputState=ENABLE;
 	OC_Structure.TIM_Pulse = 0;//����ccr
@@ -121,8 +125,8 @@ static void  	Servoshoulder_Init(void)//Tim1_1,2   pa8,9
     TIM_OC1PreloadConfig(TIM1, TIM_OCPreload_Enable);
     TIM_OC2PreloadConfig(TIM1, TIM_OCPreload_Enable);
 
-    // 先设置安全默认脉宽，再使能定时器，防止上电瞬间舵机乱动
-    /* CH3(PA10)已废弃 — 小臂已改到PA2(TIM9_CH1), 禁用输出 */
+    // 先设置安全默认脉宽，再使能定时器，防止上电瞬间舵机乱�?
+    /* CH3(PA10)已废�?�?小臂已改到PA2(TIM9_CH1), 禁用输出 */
     /* CH4(PA11) for gripper */
     TIM_OC3Init(TIM1, &OC_Structure);
     TIM_OC3PolarityConfig(TIM1, TIM_OCPolarity_High);
@@ -138,7 +142,7 @@ static void  	Servoshoulder_Init(void)//Tim1_1,2   pa8,9
 	TIM_Cmd(TIM1,ENABLE);
 	TIM_CtrlPWMOutputs(TIM1,ENABLE);
 
-	/* PA10 复用为挂钩舵机 (原小臂已改到PA2/TIM9_CH1) */
+	/* PA10 复用为挂钩舵�?(原小臂已改到PA2/TIM9_CH1) */
 	TIM_CCxCmd(TIM1, TIM_Channel_3, ENABLE);
 }
 
@@ -170,7 +174,7 @@ static void  	ServoGripper_Init(void)//Tim1_3,4   pa10,11
 	TIM_TimeBaseInit(TIM1,&TIM_structure);
 
 	TIM_OCStructInit(&OC_Structure);//�ṹ�����г�Ա��ʼ�����ã����ⲻ��Ҫ���õĳ�Ա��bug
-	OC_Structure.TIM_OCMode=TIM_OCMode_PWM1;//���ģʽѡ�� ���� �м� pwm1 pwm2
+	OC_Structure.TIM_OCMode=TIM_OCMode_PWM1;//���ģʽѡ��?���� �м� pwm1 pwm2
 	OC_Structure.TIM_OCPolarity=TIM_OCPolarity_High;//��ƽ���Է�ת����
 	OC_Structure.TIM_OutputState=ENABLE;
 	OC_Structure.TIM_Pulse = 0;//����ccr
@@ -200,12 +204,13 @@ static void  	ServoElbow_Init(void)//TIM9_CH1, PA2
 	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA,ENABLE);
 
 	GPIOinitstrcture.GPIO_Mode  = GPIO_Mode_AF;
-	GPIOinitstrcture.GPIO_Pin   = GPIO_Pin_2;
+	GPIOinitstrcture.GPIO_Pin   = GPIO_Pin_2 | GPIO_Pin_3;
 	GPIOinitstrcture.GPIO_PuPd  = GPIO_PuPd_NOPULL;
 	GPIOinitstrcture.GPIO_Speed = GPIO_Speed_50MHz;
 	GPIOinitstrcture.GPIO_OType = GPIO_OType_PP;
 	GPIO_Init(GPIOA,&GPIOinitstrcture);
 	GPIO_PinAFConfig(GPIOA,GPIO_PinSource2,GPIO_AF_TIM9);
+		GPIO_PinAFConfig(GPIOA,GPIO_PinSource3,GPIO_AF_TIM9);
 
 	TIM_InternalClockConfig(TIM9);
 	TIM_structure.TIM_ClockDivision = TIM_CKD_DIV1;
@@ -225,16 +230,22 @@ static void  	ServoElbow_Init(void)//TIM9_CH1, PA2
 	TIM_OC1PolarityConfig(TIM9,TIM_OCPolarity_High);
 	TIM_OC1PreloadConfig(TIM9, TIM_OCPreload_Enable);
 
-    TIM_SetCompare1(TIM9, SERVO_PULSE(ARM_HOME_ELBOW));
+		TIM_OC2Init(TIM9,&OC_Structure);
+		TIM_OC2PolarityConfig(TIM9,TIM_OCPolarity_High);
+		TIM_OC2PreloadConfig(TIM9, TIM_OCPreload_Enable);
 
+    TIM_SetCompare1(TIM9, SERVO_PULSE(ARM_HOME_ELBOW));
+    TIM_SetCompare2(TIM9, SERVO_PULSE(ARM_HOME_HOOK)); /* boot: hook LOCKED(10deg) */
+
+		TIM_CCxCmd(TIM9, TIM_Channel_2, ENABLE);
 	TIM_Cmd(TIM9,ENABLE);
 }
 
 void PWM_init(void)//总初始化
 {
      Pwm_TIM_Init();
-    Servoshoulder_Init();   // TIM1 CH1/CH2(腰/大臂)+CH3/CH4(小臂PA10/夹爪)
-    // CH3/CH4 已在 Servoshoulder_Init 内一并初始化，避免 ServoGripper_Init 二次 TIM_TimeBaseInit 导致 UG 抖动
+    Servoshoulder_Init();   // TIM1 CH1/CH2(�?大臂)+CH3/CH4(小臂PA10/夹爪)
+    // CH3/CH4 已在 Servoshoulder_Init 内一并初始化，避�?ServoGripper_Init 二次 TIM_TimeBaseInit 导致 UG 抖动
     ServoElbow_Init();      // TIM9 CH1(小臂PA2)
 }
 
@@ -246,23 +257,25 @@ void Servo_PWMEnable(uint8_t id, uint8_t enable)
         case 1: TIM_CCxCmd(TIM1, TIM_Channel_2, s); break;
         case 2: TIM_CCxCmd(TIM9, TIM_Channel_1, s); break;
         case 3: TIM_CCxCmd(TIM1, TIM_Channel_4, s); break;
+        case 4: TIM_CCxCmd(TIM9, TIM_Channel_2, s); break;  // 挂钩 PA10
         default: break;
     }
 }
-//����ռ�ձȣ�channelѡ���ĸ����/�����pulseռ�ձ�
+//����ռ�ձȣ�channelѡ���ĸ����?�����pulseռ�ձ�
 void PWM_Setcompare(uint8_t channel1, uint32_t pulse)//ע��arr+1=50������pulse��Χ0-50
 {
 	switch(channel1 )
 	{
 	      case MOTOR_LEFT_FRONT:   TIM_SetCompare2(TIM3, pulse); break;  // PA7 = TIM3_CH2
         case MOTOR_RIGHT_FRONT:  TIM_SetCompare1(TIM3, pulse); break;  // PA6 = TIM3_CH1
-        case MOTOR_LEFT_REAR:    TIM_SetCompare4(TIM3, pulse); break;  // PB1 = TIM3_CH4
+        case MOTOR_LEFT_REAR:    TIM_SetCompare3(TIM3, pulse); TIM_SetCompare4(TIM3, pulse); break;  // PB0+PB1 dual out
         case MOTOR_RIGHT_REAR:   TIM_SetCompare2(TIM12, pulse); break;
         case SERVO_WAIST:        TIM_SetCompare1(TIM1, pulse); break;
         case SERVO_SHOULDER:     TIM_SetCompare2(TIM1, pulse); break;
         case SERVO_ELBOW:        TIM_SetCompare3(TIM1, pulse); break;
         case SERVO_GRIPPER:      TIM_SetCompare4(TIM1, pulse); break;
         case SERVO_ELBOW_PA2:    TIM_SetCompare1(TIM9, pulse); break;
+	        case SERVO_HOOK:         TIM_SetCompare2(TIM9, pulse); break;
         default: break;
 
 	}

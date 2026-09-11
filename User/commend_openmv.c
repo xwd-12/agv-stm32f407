@@ -244,15 +244,25 @@ static void parse_omv_line(const char *line)
         return;
     }
 
-    /* $CLS 分类数据包: $CLS,class_id,confidence */
+    /* $CLS 分类数据包: $CLS,class_id,confidence[,s0,s1,s2] */
     if (line[0] == '$' && line[1] == 'C' && line[2] == 'L' && line[3] == 'S')
     {
         {
-            int cls_id, conf;
-            if (sscanf(line, "$CLS,%d,%d", &cls_id, &conf) == 2)
+            int cls_id, conf, s0, s1, s2, n;
+            n = sscanf(line, "$CLS,%d,%d,%d,%d,%d", &cls_id, &conf, &s0, &s1, &s2);
+            if (n >= 2)
             {
                 omv_cls_data.class_id   = (int16_t)cls_id;
                 omv_cls_data.confidence = (uint8_t)(conf > 100 ? 100 : (conf < 0 ? 0 : conf));
+                if (n >= 5) {
+                    omv_cls_data.score[0] = (uint8_t)(s0 > 100 ? 100 : (s0 < 0 ? 0 : s0));
+                    omv_cls_data.score[1] = (uint8_t)(s1 > 100 ? 100 : (s1 < 0 ? 0 : s1));
+                    omv_cls_data.score[2] = (uint8_t)(s2 > 100 ? 100 : (s2 < 0 ? 0 : s2));
+                } else {
+                    omv_cls_data.score[0] = 0;
+                    omv_cls_data.score[1] = 0;
+                    omv_cls_data.score[2] = 0;
+                }
                 omv_cls_data.fresh      = 1;
                 omv_cls_fresh           = 1;
                 omv_pkt_cls++;
@@ -352,6 +362,18 @@ int OpenMV_GetData(OpenMV_Data *out)
         return 0;
     *out = omv_data;
     omv_data.fresh = 0;
+    return 1;
+}
+
+/**
+ * @brief  偷看最新视觉数据 (拷贝但不清除 fresh)
+ *         遥测/监控用: 读走数据但不影响主循环 GetData 消费
+ */
+int OpenMV_PeekData(OpenMV_Data *out)
+{
+    if (omv_data.fresh == 0 || out == ((OpenMV_Data *)0))
+        return 0;
+    *out = omv_data;
     return 1;
 }
 
@@ -472,6 +494,9 @@ int OpenMV_GetCLSData(OpenMV_CLSData *out)
         return 0;
     out->class_id   = omv_cls_data.class_id;
     out->confidence = omv_cls_data.confidence;
+    out->score[0]   = omv_cls_data.score[0];
+    out->score[1]   = omv_cls_data.score[1];
+    out->score[2]   = omv_cls_data.score[2];
     out->fresh      = 1;
     omv_cls_fresh   = 0;
     return 1;

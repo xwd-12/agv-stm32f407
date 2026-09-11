@@ -1,0 +1,315 @@
+from __future__ import annotations
+
+from dataclasses import field
+from typing import Any, Dict, List, Optional
+
+from core.buffer import AdvancedDataBuffer
+from core.compat import slotted_dataclass
+from core.config import CONFIG
+from core.history import TuningHistory
+from pid_safety import (
+    apply_pid_guardrails,
+    build_fallback_suggestion,
+    is_good_enough,
+    maybe_update_best_result,
+    pid_equals,
+    should_rollback_to_best,
+)
+
+
+@slotted_dataclass
+class TuningSessionState:
+    buffer: AdvancedDataBuffer
+    history: TuningHistory
+    good_enough_rules: Dict[str, float]
+    round_num: int = 0
+    last_round: int = 0
+    stable_rounds: int = 0
+    best_result: Optional[Dict[str, Any]] = None
+    last_metrics: Dict[str, Any] = field(default_factory=dict)
+    completed_reason: str = "max_rounds_reached"
+    fallback_count: int = 0
+    guardrail_count: int = 0
+    rollback_count: int = 0
+
+
+@slotted_dataclass
+class RoundEvaluation:
+    round_index: int
+    metrics: Dict[str, Any]
+    current_pid: Dict[str, float]
+    stable_rounds: int
+    good_enough: bool = False
+    best_result: Optional[Dict[str, Any]] = None
+    best_result_updated: bool = False
+    rollback_pid: Optional[Dict[str, float]] = None
+    rollback_secondary_pid: Optional[Dict[str, float]] = None
+    completed_reason: Optional[str] = None
+    good_enough_detail: str = ""
+
+
+@slotted_dataclass
+class DecisionOutcome:
+    safe_pid: Dict[str, float]
+    action: str
+    analysis: str
+    thought: str
+    guardrail_notes: List[str]
+    fallback_used: bool
+    status: str
+    completed_reason: Optional[str] = None
+
+
+def create_tuning_session(
+    *,
+    initial_pid: Optional[Dict[str, float]] = None,
+    setpoint: Optional[float] = None,
+    max_history: int = 5,
+    require_avg_error_threshold: bool = True,
+) -> TuningSessionState:
+    buffer = AdvancedDataBuffer(max_size=CONFIG["BUFFER_SIZE"])
+    if initial_pid is not None:
+        buffer.current_pid = dict(initial_pid)
+    if setpoint is not None:
+        buffer.setpoint = float(setpoint)
+
+    return TuningSessionState(
+        buffer=buffer,
+        history=TuningHistory(max_history=max_history),
+        good_enough_rules={
+            "avg_error_threshold": CONFIG["GOOD_ENOUGH_AVG_ERROR"],
+            "steady_state_error_threshold": CONFIG["GOOD_ENOUGH_STEADY_STATE_ERROR"],
+            "overshoot_threshold": CONFIG["GOOD_ENOUGH_OVERSHOOT"],
+            "require_avg_error_threshold": require_avg_error_threshold,
+        },
+    )
+
+
+def evaluate_completed_round(
+    state: TuningSessionState, current_pid: Dict[str, float]
+) -> RoundEvaluation:
+    metrics = state.buffer.calculate_advanced_metrics()
+    round_index = state.round_num + 1
+    # 检测重试：同一轮因 pause 被中断后重新进入，last_round 已等于 round_index
+    is_retry = state.last_round == round_index
+    state.last_round = round_index
+    state.last_metrics = dict(metrics)
+    good_enough = is_good_enough(metrics, state.good_enough_rules)
+    good_enough_detail = ""
+    if not good_enough:
+        failed_rules: list[str] = []
+        if str(metrics.get("status", "UNKNOWN")).upper() != "STABLE":
+            failed_rules.append(f"status={metrics.get('status', 'UNKNOWN')}")
+        if (
+            state.good_enough_rules.get("require_avg_error_threshold", True)
+            and metrics["avg_error"] > state.good_enough_rules["avg_error_threshold"]
+        ):
+            failed_rules.append(
+                "avg_error "
+                f"{metrics['avg_error']:.3f}>{state.good_enough_rules['avg_error_threshold']:.3f}"
+            )
+        if (
+            metrics["steady_state_error"]
+            > state.good_enough_rules["steady_state_error_threshold"]
+        ):
+            failed_rules.append(
+                "steady_state_error "
+                f"{metrics['steady_state_error']:.3f}>{state.good_enough_rules['steady_state_error_threshold']:.3f}"
+            )
+        if metrics["overshoot"] > state.good_enough_rules["overshoot_threshold"]:
+            failed_rules.append(
+                "overshoot "
+                f"{metrics['overshoot']:.3f}%>{state.good_enough_rules['overshoot_threshold']:.3f}%"
+            )
+        good_enough_detail = "; ".join(failed_rules)
+
+    if is_retry:
+        # 重试时不累加 stable_rounds，保留上次结果，避免同一批数据重复计分
+        pass
+    elif good_enough:
+        state.stable_rounds += 1
+    else:
+        state.stable_rounds = 0
+
+    current_secondary = (
+        dict(state.buffer.secondary_pid)
+        if state.buffer.secondary_pid is not None
+        else None
+    )
+    previous_best = state.best_result
+    state.best_result = maybe_update_best_result(
+        state.best_result,
+        current_pid,
+        metrics,
+        round_index,
+        secondary_pid=current_secondary,
+    )
+    best_result_updated = (
+        state.best_result is not None and state.best_result is not previous_best
+    )
+
+    rollback_pid: Optional[Dict[str, float]] = None
+    rollback_secondary_pid: Optional[Dict[str, float]] = None
+    completed_reason: Optional[str] = None
+    if (
+        state.best_result
+        and not pid_equals(current_pid, state.best_result["pid"])
+        and should_rollback_to_best(metrics, state.best_result["metrics"])
+    ):
+        rollback_pid = dict(state.best_result["pid"])
+        best_secondary = state.best_result.get("secondary_pid")
+        if best_secondary is not None:
+            rollback_secondary_pid = dict(best_secondary)
+        if is_good_enough(state.best_result["metrics"], state.good_enough_rules):
+            completed_reason = "rollback_to_best"
+    elif state.stable_rounds >= CONFIG["REQUIRED_STABLE_ROUNDS"]:
+        completed_reason = "stable_rounds_reached"
+    elif (
+        not good_enough
+        and metrics["avg_error"] < CONFIG["MIN_ERROR_THRESHOLD"]
+        and metrics["status"] == "STABLE"
+    ):
+        completed_reason = "low_error_converged"
+
+    return RoundEvaluation(
+        round_index=round_index,
+        metrics=metrics,
+        current_pid=dict(current_pid),
+        stable_rounds=state.stable_rounds,
+        good_enough=good_enough,
+        best_result=state.best_result,
+        best_result_updated=best_result_updated,
+        rollback_pid=rollback_pid,
+        rollback_secondary_pid=rollback_secondary_pid,
+        completed_reason=completed_reason,
+        good_enough_detail=good_enough_detail,
+    )
+
+
+def record_observation_round(
+    state: TuningSessionState,
+    evaluation: RoundEvaluation,
+) -> None:
+    state.history.add_record(
+        evaluation.round_index,
+        evaluation.current_pid,
+        evaluation.metrics,
+        "Good-enough round observed; PID held for stability verification.",
+        "Skipped LLM adjustment because the current response already met the good-enough criteria.",
+    )
+    state.round_num += 1
+    state.buffer.reset()
+
+
+def apply_rollback(
+    state: TuningSessionState,
+    rollback_pid: Dict[str, float],
+    *,
+    rollback_secondary_pid: Optional[Dict[str, float]] = None,
+) -> None:
+    state.rollback_count += 1
+    state.round_num += 1
+    state.buffer.current_pid = dict(rollback_pid)
+    if rollback_secondary_pid is not None:
+        state.buffer.secondary_pid = dict(rollback_secondary_pid)
+    state.buffer.reset()
+
+
+def record_rollback_round(
+    state: TuningSessionState,
+    evaluation: RoundEvaluation,
+    rollback_pid: Dict[str, float],
+    *,
+    target_round: Optional[int] = None,
+) -> str:
+    target_label = (
+        f"round {target_round}" if target_round is not None else "the best stable round"
+    )
+    analysis = (
+        "Automatic rollback triggered because this round regressed against "
+        f"{target_label}. Reverted to "
+        f"P={rollback_pid['p']:.4f}, I={rollback_pid['i']:.4f}, D={rollback_pid['d']:.4f}."
+    )
+    thought = (
+        "This round was evaluated with "
+        f"P={evaluation.current_pid['p']:.4f}, I={evaluation.current_pid['i']:.4f}, D={evaluation.current_pid['d']:.4f}. "
+        "Its response was worse than the current best stable result, so the attempt was rejected."
+    )
+    state.history.add_record(
+        evaluation.round_index,
+        evaluation.current_pid,
+        evaluation.metrics,
+        analysis,
+        thought,
+    )
+    return analysis
+
+
+def finalize_decision(
+    state: TuningSessionState,
+    evaluation: RoundEvaluation,
+    result: Optional[Dict[str, Any]],
+    *,
+    limits: Optional[Dict[str, Dict[str, float]]] = None,
+) -> DecisionOutcome:
+    if not result:
+        result = build_fallback_suggestion(
+            evaluation.current_pid,
+            evaluation.metrics,
+            limits=limits,
+        )
+
+    safe_pid, guardrail_notes = apply_pid_guardrails(
+        evaluation.current_pid,
+        result,
+        limits=limits,
+    )
+    analysis = str(result.get("analysis_summary", "No analysis summary was provided."))
+    thought = str(result.get("thought_process", ""))
+    action = str(result.get("tuning_action", "UNKNOWN"))
+    fallback_used = bool(result.get("fallback_used"))
+    status = str(result.get("status", "TUNING")).upper()
+
+    state.history.add_record(
+        evaluation.round_index,
+        evaluation.current_pid,
+        evaluation.metrics,
+        analysis,
+        thought,
+    )
+    state.buffer.current_pid = dict(safe_pid)
+    if fallback_used:
+        state.fallback_count += 1
+    if guardrail_notes:
+        state.guardrail_count += 1
+    state.round_num += 1
+    state.buffer.reset()
+
+    completed_reason = "llm_marked_done" if status == "DONE" else None
+    return DecisionOutcome(
+        safe_pid=safe_pid,
+        action=action,
+        analysis=analysis,
+        thought=thought,
+        guardrail_notes=list(guardrail_notes),
+        fallback_used=fallback_used,
+        status=status,
+        completed_reason=completed_reason,
+    )
+
+
+def build_tuning_result(
+    state: TuningSessionState, *, final_pid: Dict[str, float], stopped: bool
+) -> Dict[str, Any]:
+    return {
+        "provider": CONFIG["LLM_PROVIDER"],
+        "model": CONFIG["LLM_MODEL_NAME"],
+        "rounds_completed": state.last_round,
+        "final_pid": dict(final_pid),
+        "final_metrics": dict(state.last_metrics),
+        "stopped": stopped,
+        "fallback_count": state.fallback_count,
+        "guardrail_count": state.guardrail_count,
+        "rollback_count": state.rollback_count,
+        "completed_reason": state.completed_reason,
+    }

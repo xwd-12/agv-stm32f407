@@ -7,12 +7,13 @@
  #include "visual_servo.h"
 #include "commend_openmv.h"
 
-// è¶…æ—¶é˜ˆå€¼(10ms tick è®¡æ•°)
-#define TIMEOUT_GRASP   3000  // æŠ“å–è¶…æ—¶ 30s
-#define TIMEOUT_PLACE   3000  // æŠ•æ”¾è¶…æ—¶ 30s
-#define TIMEOUT_RESET   3000  // å¤ä½è¶…æ—¶ 30s
-#define DEBOUNCE_TICKS  5     // çŠ¶æ€åˆ‡æ¢é˜²æŠ– 50ms
-#define TASK_TIMEOUT_TICKS 3000  // TaskNav å·¡çº¿è¶…æ—¶ 30s
+extern VisualServo_Handle visual_servo;
+
+// ³¬Ê±ãĞÖµ(10ms tick ¼ÆÊı)
+#define TIMEOUT_GRASP   3000  // ×¥È¡³¬Ê± 30s
+#define TIMEOUT_PLACE   3000  // Í¶·Å³¬Ê± 30s
+#define TIMEOUT_RESET   3000  // ¸´Î»³¬Ê± 30s
+#define DEBOUNCE_TICKS  5     // ×´Ì¬ÇĞ»»·À¶¶ 50ms
 
 static ArmState arm_state        = ARM_IDLE;
 static ArmState arm_state_next   = ARM_IDLE;
@@ -54,7 +55,7 @@ uint8_t ArmSM_RequestPlace(uint16_t waist_angle)
 {
     if (arm_state != ARM_IDLE)
         return 0;
-    (void)waist_angle;           // angle ç”± command å±‚ç›´æ¥ä¼ ç»™ Action_Place
+    (void)waist_angle;           // angle ÓÉ command ²ãÖ±½Ó´«¸ø Action_Place
     arm_state_next   = ARM_PLACING;
     timeout_limit    = TIMEOUT_PLACE;
     tick_counter     = 0;
@@ -65,7 +66,7 @@ uint8_t ArmSM_RequestPlace(uint16_t waist_angle)
 uint8_t ArmSM_RequestReset(void)
 {
     if (arm_state == ARM_ESTOP) {
-        // æ€¥åœåå¤ä½: å…ˆæ¸…é™¤æ€¥åœ
+        // ¼±Í£ºó¸´Î»: ÏÈÇå³ı¼±Í£
         arm_state        = ARM_IDLE;
         arm_state_next   = ARM_IDLE;
         state_stable_cnt = 0;
@@ -87,7 +88,7 @@ void ArmSM_EmergencyStop(void)
     state_stable_cnt = 0;
 }
 
-// è¿åŠ¨å®Œæˆåç”± command å±‚è°ƒç”¨, å°†çŠ¶æ€åˆ‡å› IDLE
+// ÔË¶¯Íê³ÉºóÓÉ command ²ãµ÷ÓÃ, ½«×´Ì¬ÇĞ»Ø IDLE
 void ArmSM_NotifyComplete(void)
 {
     if (arm_state == ARM_GRASPING || arm_state == ARM_PLACING || arm_state == ARM_RESETTING) {
@@ -98,10 +99,10 @@ void ArmSM_NotifyComplete(void)
     }
 }
 
-// æ¯10msè°ƒç”¨ä¸€æ¬¡ (ISRä¸Šä¸‹æ–‡, ä¸èƒ½æœ‰é˜»å¡è°ƒç”¨)
+// Ã¿10msµ÷ÓÃÒ»´Î (ISRÉÏÏÂÎÄ, ²»ÄÜÓĞ×èÈûµ÷ÓÃ)
 void ArmSM_Tick10ms(void)
 {
-    // é˜²æŠ–: ç›®æ ‡çŠ¶æ€ä¿æŒ DEBOUNCE_TICKS æ¬¡ä¸å˜æ‰åˆ‡æ¢
+    // ·À¶¶: Ä¿±ê×´Ì¬±£³Ö DEBOUNCE_TICKS ´Î²»±ä²ÅÇĞ»»
     if (arm_state != arm_state_next) {
         state_stable_cnt++;
         if (state_stable_cnt >= DEBOUNCE_TICKS) {
@@ -112,7 +113,7 @@ void ArmSM_Tick10ms(void)
         return;
     }
 
-    // è¶…æ—¶æ£€æµ‹: ä»»ä½•éç©ºé—²/éæ€¥åœçŠ¶æ€
+    // ³¬Ê±¼ì²â: ÈÎºÎ·Ç¿ÕÏĞ/·Ç¼±Í£×´Ì¬
     tick_counter++;
     if (tick_counter >= timeout_limit && timeout_limit > 0
             && arm_state != ARM_IDLE && arm_state != ARM_ESTOP) {
@@ -141,214 +142,6 @@ extern volatile int16_t  target_speed[4];
 extern Line_follow_Handle line_follow;
 extern volatile uint32_t g_sys_tick;
 
-static TaskNavState task_state    = TASK_IDLE;
-static int32_t      task_dist_a   = 0;     // encoder counts to point A
-static int32_t      task_dist_b   = 0;     // encoder counts from A to B
-static int32_t      task_enc_start[4] = {0, 0, 0, 0};
-static uint32_t     task_check_tick  = 0;
-static uint32_t     task_timeout_tick = 0; // å·¡çº¿è¶…æ—¶è®¡æ—¶èµ·ç‚¹
-
-void TaskNav_Init(void)
-{
-    task_state        = TASK_IDLE;
-    task_dist_a       = 0;
-    task_dist_b       = 0;
-    task_check_tick   = 0;
-    task_timeout_tick = 0;
-}
-
-void TaskNav_Start(int32_t dist_a, int32_t dist_b)
-{
-    if (task_state != TASK_IDLE)
-        return;
-
-    if (dist_a <= 0 || dist_b <= 0) {
-        printf("Task: invalid distance, must be > 0\r\n");
-        return;
-    }
-
-    task_dist_a = dist_a;
-    task_dist_b = dist_b;
-
-    // snapshot encoder start positions (motors 0,1,2; motor 3 encoder broken)
-    task_enc_start[0] = Encoder_GetPosition(0);
-    task_enc_start[1] = Encoder_GetPosition(1);
-    task_enc_start[2] = Encoder_GetPosition(2);
-    task_enc_start[3] = 0;
-
-    task_state        = TASK_GO_TO_A;
-    task_check_tick   = g_sys_tick;
-    task_timeout_tick = g_sys_tick;
-    work_mode         = MODE_LINE_FOLLOW;
-    printf("Task: GO_TO_A, target=%ld counts\r\n", (long)dist_a);
-}
-
-void TaskNav_Stop(void)
-{
-    int i;
-    task_state = TASK_IDLE;
-    work_mode  = MODE_MANUAL;
-    for (i = 0; i < 4; i++)
-        target_speed[i] = 0;
-    printf("Task stopped\r\n");
-}
-
-TaskNavState TaskNav_GetState(void)
-{
-    return task_state;
-}
-
-int32_t TaskNav_GetProgress(void)
-{
-    int32_t avg;
-    if (task_state == TASK_IDLE || task_state == TASK_DONE)
-        return 0;
-    avg = (
-        (Encoder_GetPosition(0) - task_enc_start[0]) +
-        (Encoder_GetPosition(1) - task_enc_start[1]) +
-        (Encoder_GetPosition(2) - task_enc_start[2])
-    ) / 3;
-    return avg;
-}
-
-int32_t TaskNav_GetTarget(void)
-{
-    if (task_state == TASK_GO_TO_A || task_state == TASK_GRASP)
-        return task_dist_a;
-    if (task_state == TASK_GO_TO_B || task_state == TASK_PLACE)
-        return task_dist_b;
-    return 0;
-}
-
-// TaskNav_Process: call in main loop. Non-blocking except for arm actions.
-void TaskNav_Process(void)
-{
-    uint8_t i;
-    int32_t avg_dist;
-
-    switch (task_state)
-    {
-
-    case TASK_IDLE:
-    case TASK_DONE:
-        return;
-
-    case TASK_GO_TO_A:
-        // throttle: check every 50ms (5 ticks)
-        if (g_sys_tick - task_check_tick < 5)
-            return;
-        task_check_tick = g_sys_tick;
-
-        // timeout: 30s without reaching target
-        if (g_sys_tick - task_timeout_tick > TASK_TIMEOUT_TICKS) {
-            for (i = 0; i < 4; i++)
-                target_speed[i] = 0;
-            work_mode  = MODE_MANUAL;
-            task_state = TASK_IDLE;
-            printf("Task timeout at GO_TO_A\r\n");
-            return;
-        }
-
-        avg_dist = (
-            (Encoder_GetPosition(0) - task_enc_start[0]) +
-            (Encoder_GetPosition(1) - task_enc_start[1]) +
-            (Encoder_GetPosition(2) - task_enc_start[2])
-        ) / 3;
-
-        if (avg_dist >= task_dist_a) {
-            // arrived at A: stop motors, prepare for grasp
-            for (i = 0; i < 4; i++)
-                target_speed[i] = 0;
-            work_mode  = MODE_MANUAL;
-            task_state = TASK_GRASP;
-            printf("Arrived at A (%ld counts)\r\n", (long)avg_dist);
-        }
-        return;
-
-    case TASK_GRASP:
-        // arm actions are blocking (they use Delay_ms internally)
-        // safe in main loop, not ISR
-        // Bug#3: æ£€æŸ¥ ArmSM è¿”å›å€¼, è‡‚å¿™æ—¶è·³è¿‡
-        if (ArmSM_RequestGrasp()) {
-            Action_Grasp();
-            ArmSM_NotifyComplete();
-        } else {
-            printf("TaskNav: arm busy, skip grasp\r\n");
-        }
-
-        // snapshot encoder for segment B (relative from A)
-        task_enc_start[0] = Encoder_GetPosition(0);
-        task_enc_start[1] = Encoder_GetPosition(1);
-        task_enc_start[2] = Encoder_GetPosition(2);
-
-        task_state        = TASK_GO_TO_B;
-        task_check_tick   = g_sys_tick;
-        task_timeout_tick = g_sys_tick;
-        work_mode         = MODE_LINE_FOLLOW;
-        printf("Grasp done, GO_TO_B target=%ld counts\r\n", (long)task_dist_b);
-        return;
-
-    case TASK_GO_TO_B:
-        if (g_sys_tick - task_check_tick < 5)
-            return;
-        task_check_tick = g_sys_tick;
-
-        // timeout: 30s without reaching target
-        if (g_sys_tick - task_timeout_tick > TASK_TIMEOUT_TICKS) {
-            for (i = 0; i < 4; i++)
-                target_speed[i] = 0;
-            work_mode  = MODE_MANUAL;
-            task_state = TASK_IDLE;
-            printf("Task timeout at GO_TO_B\r\n");
-            return;
-        }
-
-        avg_dist = (
-            (Encoder_GetPosition(0) - task_enc_start[0]) +
-            (Encoder_GetPosition(1) - task_enc_start[1]) +
-            (Encoder_GetPosition(2) - task_enc_start[2])
-        ) / 3;
-
-        if (avg_dist >= task_dist_b) {
-            for (i = 0; i < 4; i++)
-                target_speed[i] = 0;
-            work_mode  = MODE_MANUAL;
-            task_state = TASK_PLACE;
-            printf("Arrived at B (%ld counts)\r\n", (long)avg_dist);
-        }
-        return;
-
-    case TASK_PLACE:
-        /* Bug#3: æ£€æŸ¥ ArmSM è¿”å›å€¼, è‡‚å¿™æ—¶è·³è¿‡ */
-        if (ArmSM_RequestPlace(110)) {
-            Action_Place(110);
-            ArmSM_NotifyComplete();
-        } else {
-            printf("TaskNav: arm busy, skip place\r\n");
-        }
-        task_state = TASK_DONE;
-        work_mode = MODE_LINE_FOLLOW;
-        printf("Place done, resume line following\r\n");
-        return;
-    }
-}
-
-const char* TaskNav_StateName(TaskNavState s)
-{
-    switch (s) {
-    case TASK_IDLE:     return "IDLE";
-    case TASK_GO_TO_A:  return "GO_TO_A";
-    case TASK_GRASP:    return "GRASP";
-    case TASK_GO_TO_B:  return "GO_TO_B";
-    case TASK_PLACE:    return "PLACE";
-    case TASK_DONE:     return "DONE";
-    default:            return "???";
-    }
-}
-
-// ======================== TaskQueue System ======================== 
-
-extern VisualServo_Handle visual_servo;
 
 void TaskQueue_Init(TaskQueue *q)
 {
@@ -388,14 +181,14 @@ void TaskQueue_Start(TaskQueue *q)
     q->phase      = TQ_TRAVEL;
     q->phase_start_tick = g_sys_tick;
     q->check_tick = g_sys_tick;
-    // è¶…æ—¶: æ¯æ­¥é»˜è®¤ 30 ç§’ = 3000 ticks 
+    // ³¬Ê±: Ã¿²½Ä¬ÈÏ 30 Ãë = 3000 ticks 
     q->timeout_ticks = 3000;
 
-    // å¿«ç…§ç¼–ç å™¨èµ·å§‹ä½ç½® 
+    // ¿ìÕÕ±àÂëÆ÷ÆğÊ¼Î»ÖÃ 
     for (i = 0; i < 4; i++)
         q->enc_start[i] = Encoder_GetPosition(i);
 
-    // æ ¹æ®ç¬¬ä¸€æ­¥çš„ travel_mode è®¾ç½®å·¥ä½œæ¨¡å¼ 
+    // ¸ù¾İµÚÒ»²½µÄ travel_mode ÉèÖÃ¹¤×÷Ä£Ê½ 
     if (q->steps[0].travel_mode != 0)
         work_mode = MODE_LINE_FOLLOW;
     else
@@ -460,7 +253,7 @@ void TaskQueue_Process(TaskQueue *q)
 
     step = &q->steps[q->step_index];
 
-    // è¶…æ—¶æ£€æµ‹ 
+    // ³¬Ê±¼ì²â 
     if (q->phase != TQ_IDLE && q->phase != TQ_DONE && q->phase != TQ_ERROR)
     {
         if (g_sys_tick - q->phase_start_tick > q->timeout_ticks)
@@ -479,7 +272,7 @@ void TaskQueue_Process(TaskQueue *q)
 
     case TQ_TRAVEL:
     {
-        // æ¯ 50ms æ£€æŸ¥ä¸€æ¬¡ 
+        // Ã¿ 50ms ¼ì²éÒ»´Î 
         if (g_sys_tick - q->check_tick < 5)
             return;
         q->check_tick = g_sys_tick;
@@ -490,7 +283,7 @@ void TaskQueue_Process(TaskQueue *q)
             (Encoder_GetPosition(2) - q->enc_start[2])
         ) / 3;
 
-        // è§¦å‘æ¡ä»¶ 1: ç¼–ç å™¨é‡Œç¨‹åˆ°è¾¾ 
+        // ´¥·¢Ìõ¼ş 1: ±àÂëÆ÷Àï³Ìµ½´ï 
         if (avg_dist >= step->encoder_dist)
         {
             for (i = 0; i < 4; i++)
@@ -499,15 +292,15 @@ void TaskQueue_Process(TaskQueue *q)
             goto enter_dock;
         }
 
-        // è§¦å‘æ¡ä»¶ 2: å·¡çº¿è¿‡ç¨‹ä¸­æå‰æ£€æµ‹åˆ°ç›®æ ‡æ ‡ç­¾ (è‡ªåŠ¨åˆ‡å…¥è§†è§‰ä¼ºæœ) 
-        // ä½¿ç”¨ OpenMV_TagSeenRecently è€Œé OpenMV_GetData, é¿å…ä¸ ISR æŠ¢æ•°æ® 
+        // ´¥·¢Ìõ¼ş 2: Ñ²Ïß¹ı³ÌÖĞÌáÇ°¼ì²âµ½Ä¿±ê±êÇ© (×Ô¶¯ÇĞÈëÊÓ¾õËÅ·ş) 
+        // Ê¹ÓÃ OpenMV_TagSeenRecently ¶ø·Ç OpenMV_GetData, ±ÜÃâÓë ISR ÇÀÊı¾İ 
         if (step->tag_id >= 0)
         {
             int16_t seen_tag;
             seen_tag = OpenMV_GetLastTagId();
             if (seen_tag >= 0 && (step->tag_id < 0 || seen_tag == step->tag_id))
             {
-                // æ ‡ç­¾åœ¨æœ€è¿‘ 100ms (10 ticks) å†…å‡ºç°è¿‡ â†’ åˆ¤æ–­ä¸ºå·²è¿›å…¥å¯¹æ¥èŒƒå›´ 
+                // ±êÇ©ÔÚ×î½ü 100ms (10 ticks) ÄÚ³öÏÖ¹ı ¡ú ÅĞ¶ÏÎªÒÑ½øÈë¶Ô½Ó·¶Î§ 
                 if (OpenMV_TagSeenRecently(step->tag_id, 10))
                 {
                     for (i = 0; i < 4; i++)
@@ -521,24 +314,24 @@ void TaskQueue_Process(TaskQueue *q)
         return;
 
 enter_dock:
-        // åˆ¤æ–­æ˜¯å¦éœ€è¦è§†è§‰å¯¹æ¥ 
+        // ÅĞ¶ÏÊÇ·ñĞèÒªÊÓ¾õ¶Ô½Ó 
         if (step->tag_id >= 0)
         {
-            // è®¾ç½®è§†è§‰ä¼ºæœç›®æ ‡ 
+            // ÉèÖÃÊÓ¾õËÅ·şÄ¿±ê 
             VisualServo_SetTarget(&visual_servo,
                 step->tag_id, step->dock_distance);
             VisualServo_Reset(&visual_servo);
             work_mode = MODE_VISUAL_SERVO;
             q->phase  = TQ_DOCK;
             q->phase_start_tick = g_sys_tick;
-            // dock é˜¶æ®µè¶…æ—¶ 10 ç§’ 
+            // dock ½×¶Î³¬Ê± 10 Ãë 
             q->timeout_ticks = 1000;
             printf("TaskQueue: step %d, docking to tag %d\r\n",
                 q->step_index, step->tag_id);
         }
         else
         {
-            // æ— éœ€å¯¹æ¥ï¼Œç›´æ¥æ‰§è¡ŒåŠ¨ä½œ 
+            // ÎŞĞè¶Ô½Ó£¬Ö±½ÓÖ´ĞĞ¶¯×÷ 
             q->phase  = TQ_ACTION;
             q->phase_start_tick = g_sys_tick;
             q->timeout_ticks = 800;
@@ -550,7 +343,7 @@ enter_dock:
 
     case TQ_DOCK:
     {
-        // æ£€æŸ¥æ˜¯å¦å¯¹å‡† 
+        // ¼ì²éÊÇ·ñ¶Ô×¼ 
         if (VisualServo_IsAligned(&visual_servo))
         {
             work_mode = MODE_MANUAL;
@@ -563,7 +356,7 @@ enter_dock:
         }
         else if (VisualServo_IsLost(&visual_servo))
         {
-            // æ ‡ç­¾æŒç»­ä¸¢å¤± 
+            // ±êÇ©³ÖĞø¶ªÊ§ 
             q->phase = TQ_ERROR;
             work_mode = MODE_MANUAL;
             for (i = 0; i < 4; i++)
@@ -575,16 +368,25 @@ enter_dock:
 
     case TQ_ACTION:
     {
-        // æ‰§è¡ŒåŠ¨ä½œ (é˜»å¡, åœ¨ä¸»å¾ªç¯ä¸­å®‰å…¨) 
+        // Ö´ĞĞ¶¯×÷ (×èÈû, ÔÚÖ÷Ñ­»·ÖĞ°²È«)
+        // Bugfix H5: Ìí¼Ó ArmSM ÃÅ¿Ø, Óë TaskNav/AI pipeline »¥³â
         switch (step->action)
         {
         case ACTION_GRASP:
-            Action_Grasp();
-            ArmSM_NotifyComplete();
+            if (ArmSM_RequestGrasp()) {
+                Action_Grasp();
+                ArmSM_NotifyComplete();
+            } else {
+                printf("TaskQueue: arm busy, skip grasp\r\n");
+            }
             break;
         case ACTION_PLACE:
-            Action_Place(step->action_param);
-            ArmSM_NotifyComplete();
+            if (ArmSM_RequestPlace(step->action_param)) {
+                Action_Place(step->action_param);
+                ArmSM_NotifyComplete();
+            } else {
+                printf("TaskQueue: arm busy, skip place\r\n");
+            }
             break;
         case ACTION_HOOK:
             Action_HookTrailer();
@@ -593,13 +395,13 @@ enter_dock:
             Action_UnhookTrailer();
             break;
         default:
-            // ACTION_NONE: æ— åŠ¨ä½œ, ä»…åœé  
+            // ACTION_NONE: ÎŞ¶¯×÷, ½öÍ£¿¿
             break;
         }
 
         printf("TaskQueue: step %d action done\r\n", q->step_index);
 
-        // æ¨è¿›åˆ°ä¸‹ä¸€æ­¥ 
+        // ÍÆ½øµ½ÏÂÒ»²½ 
         q->step_index++;
         if (q->step_index >= q->step_count)
         {
@@ -612,7 +414,7 @@ enter_dock:
             return;
         }
 
-        // å‡†å¤‡ä¸‹ä¸€æ­¥çš„ TRAVEL é˜¶æ®µ 
+        // ×¼±¸ÏÂÒ»²½µÄ TRAVEL ½×¶Î 
         for (i = 0; i < 4; i++)
             q->enc_start[i] = Encoder_GetPosition(i);
 

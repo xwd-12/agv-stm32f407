@@ -1,0 +1,70 @@
+<mxfile host="Electron" agent="Python">
+  <diagram id="diag" name="硬件连接拓扑">
+    <mxGraphModel dx="1044" dy="782" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="620" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Microsoft YaHei;fontSize=16;fontColor=#2C3E50;fontStyle=1;" value="图5  硬件连接拓扑" vertex="1">
+          <mxGeometry height="30" width="400" x="350" y="5" as="geometry" />
+        </mxCell>
+        <mxCell id="mcu" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Microsoft YaHei;fontSize=13;align=center;verticalAlign=middle;fillColor=#D5F5E3;strokeColor=#1E8449;strokeWidth=2;fontColor=#145A32;fontStyle=1;" value="&lt;b&gt;STM32F407ZGTx  主控制器&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;Cortex-M4 @168MHz  |  TIM6 100Hz心跳  |  SWD调试(PA13/PA14)  |  NVIC: 低压保护0,0 / 心跳1,0 / 视觉2,0&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="1020" x="40" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="layer_sense" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=6;fontFamily=Microsoft YaHei;fontSize=11;align=left;verticalAlign=top;fillColor=#EBF5FB;strokeColor=#AED6F1;strokeWidth=1.5;fontStyle=1;dashed=1;" value="&lt;b&gt;感  知&lt;/b&gt;" vertex="1">
+          <mxGeometry height="200" width="380" x="40" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="enc" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=11;align=center;verticalAlign=middle;fillColor=#D6EAF8;strokeColor=#2471A3;strokeWidth=1.5;fontColor=#1A5276;fontStyle=1;" value="&lt;b&gt;4路正交编码器&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;TIM2/TIM4/TIM5/TIM8&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;四轮独立测速 · IIR低通 · 回绕容错&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="340" x="60" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="line" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=11;align=center;verticalAlign=middle;fillColor=#D6EAF8;strokeColor=#2471A3;strokeWidth=1.5;fontColor=#1A5276;fontStyle=1;" value="&lt;b&gt;5路巡线传感器&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;PC0-PC3 PA4 | GPIO输入 | 低电平有效&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;3帧去抖 · 加权误差 · 丢线保持&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="340" x="60" y="255" as="geometry" />
+        </mxCell>
+        <mxCell id="layer_exec" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=6;fontFamily=Microsoft YaHei;fontSize=11;align=left;verticalAlign=top;fillColor=#FDEDEC;strokeColor=#E6B0AA;strokeWidth=1.5;fontStyle=1;dashed=1;" value="&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; " vertex="1">
+          <mxGeometry height="200" width="380" x="680" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="motor" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=11;align=center;verticalAlign=middle;fillColor=#F2D7D5;strokeColor=#C0392B;strokeWidth=1.5;fontColor=#641E16;fontStyle=1;" value="&lt;b&gt;4路直流电机&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;TIM3 CH1/2/4 + TIM12 CH2 | 1kHz PWM&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;四轮差速 · 独立PID闭环 · ±1000&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="340" x="700" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="servo" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=11;align=center;verticalAlign=middle;fillColor=#FCF3CF;strokeColor=#D4AC0D;strokeWidth=1.5;fontColor=#7D6608;fontStyle=1;" value="&lt;b&gt;4路舵机 (4-DOF机械臂)&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;TIM1 CH1/2/4 + TIM9 CH1 | 50Hz PWM&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;腰座(圆台) · 大臂 · 小臂 · 夹爪&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="340" x="700" y="255" as="geometry" />
+        </mxCell>
+        <mxCell id="comm" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=11;align=center;verticalAlign=middle;fillColor=#D1F2EB;strokeColor=#117A65;strokeWidth=1.5;fontColor=#0B5345;fontStyle=1;" value="&lt;b&gt;通信 &amp; 视觉&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;OpenMV Camera | USART3 115200bps | $TAG/$QR/$CLS数据包&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;调试 UART5 115200bps | PVD低压保护 2.9V&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="1020" x="40" y="390" as="geometry" />
+        </mxCell>
+        <mxCell id="a_enc" edge="1" parent="1" source="enc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2471A3;strokeWidth=3;fontSize=13;fontStyle=1;labelBackgroundColor=#FFFFFF;" target="mcu" value="PA0/1/15 PB3/6/7 PC6/7 ↑">
+          <mxGeometry relative="1" x="-0.0011" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a_line" edge="1" parent="1" source="line" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2471A3;strokeWidth=3;fontSize=13;fontStyle=1;labelBackgroundColor=#FFFFFF;" target="mcu" value="PC0-PC3 PA4 ↑">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_motor" edge="1" parent="1" source="mcu" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#C0392B;strokeWidth=3;fontSize=13;fontStyle=1;labelBackgroundColor=#FFFFFF;" target="motor" value="PA7/PA6/PB1/PB15 ↓">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_servo" edge="1" parent="1" source="mcu" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#D4AC0D;strokeWidth=3;fontSize=13;fontStyle=1;labelBackgroundColor=#FFFFFF;" target="servo" value="PA8/PA9/PA2/PA11 ↓">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_comm1" edge="1" parent="1" source="mcu" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#117A65;strokeWidth=3;fontSize=13;fontStyle=1;labelBackgroundColor=#FFFFFF;" target="comm" value="U5:PC12/PD2 U3:PC10/PC11">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="550" y="120" />
+              <mxPoint x="550" y="370" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a_comm2" edge="1" parent="1" source="comm" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#117A65;strokeWidth=3;fontSize=13;fontStyle=1;labelBackgroundColor=#FFFFFF;dashed=1;" target="mcu" value="视觉数据 ↑">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="570" y="370" />
+              <mxPoint x="570" y="120" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=10;align=left;verticalAlign=middle;fillColor=#F8F9F9;strokeColor=#BDC3C7;strokeWidth=1;" value="&lt;b&gt;图例&lt;/b&gt;&lt;br&gt;实线：指令/PWM输出&lt;br&gt;虚线：传感器反馈" vertex="1">
+          <mxGeometry height="55" width="150" x="910" y="480" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -25,7 +25,8 @@
 #define SENSOR_PORT_RIGHT1    GPIOA
 
 void Line_sensor_Init(void);
-void LineSensor_Read(bool states[5]);     // read 5ch (active-low, 1=line)
+void LineSensor_Read(bool states[5]);     // read 5ch (active-high: 黑线=GPIO高=1=检测到线)
 float LineSensor_CalcError(const bool states[5]); // 5ch weighted error
+bool LineSensor_AllOn(void);              // 5ch all on = 十字路口
 
 #endif

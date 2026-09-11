@@ -3,7 +3,7 @@
 #include <stdbool.h>
 
 // Standard 5-channel line sensor weights (L->R): LEFT1=-2, LEFT2=-1, CENTER=+1, RIGHT2=+2
-// Normal driving: center sensor on line, error=0 â†’ error=0
+// Normal driving: center sensor on line, error=0 â†?error=0
 // All 5 channels debounced (3 samples, 30ms) to filter flicker
 static const int8_t weights[5] = { 2, 1, 0, -1, -2 };
 
@@ -30,7 +30,8 @@ void Line_sensor_Init(void)
     GPIO_Init(SENSOR_PORT_RIGHT1, &GPIO_InitStruct);
 }
 
-// Read 5-channel sensor states (active-high: 1 = line detected)
+// Read 5-channel sensor states (active-high: black line -> GPIO HIGH -> states=1 = line detected;
+//   "ÃğµÆ"ÊÇÄ£¿éÖ¸Ê¾µÆ, ²»´ú±íÊä³öµçÆ½! Êµ²âºÚÏß=GPIO¸ß)
 // states[0]=RIGHT1(PA4), states[1]=RIGHT2(PC3), states[2]=CENTER(PC2), states[3]=LEFT2(PC1), states[4]=LEFT1(PC0)
 // All channels debounced: 3 consecutive same readings (30ms @ 100Hz)
 void LineSensor_Read(bool states[5])
@@ -80,4 +81,19 @@ float LineSensor_CalcError(const bool states[5])
     }
     if (detected == 0) return 0.0f;
     return (float)err / (float)detected;
+}
+
+// åå­—è·¯å£æ£€æµ? 5 è·¯å…¨éƒ¨æ£€æµ‹åˆ°çº?(å¸?3 å¸§æ¶ˆæŠ?
+bool LineSensor_AllOn(void)
+{
+    bool states[5];
+    uint8_t i;
+    uint8_t on = 0;
+
+    LineSensor_Read(states);
+    for (i = 0; i < 5; i++) {
+        if (states[i]) on++;
+    }
+    /* LineSensor_Read ÄÚ²¿ÒÑÓĞ 3 Ö¡Ïû¶¶, ÕâÀï 1 Ö¡È«ÁÁ¼´´¥·¢ (Ê®×ÖÂ·¿ÚÅĞµÃ¿ì) */
+    return (on == 5);
 }

@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+venv/
+venv_build/
+env/
+
+# PyInstaller
+*.spec
+build/
+dist/
+
+# Configuration (Sensitive Data)
+config.json
+
+# Benchmark Results
+result.json
+
+# IDE
+.vscode/
+.idea/
+.claude/
+
+# Local artifacts
+artifacts/
+logs/
+build_with_matlab310.bat
+fix_py38_compat.py

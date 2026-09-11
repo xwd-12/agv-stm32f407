@@ -1,0 +1,826 @@
+import json
+import os
+import sys
+import tempfile
+import types
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+import core.config as core_config
+import simulator
+from core.buffer import AdvancedDataBuffer
+from core.config import CONFIG, DEFAULT_CONFIG, load_config
+from core.tuning_session import (
+    RoundEvaluation,
+    create_tuning_session,
+    finalize_decision,
+    record_rollback_round,
+)
+from llm.client import JSONStreamFormatter, LLMTuner
+from llm.prompts import build_user_prompt, get_system_prompt, normalize_tuning_mode
+from pid_safety import apply_pid_guardrails, adapt_simulink_pid_limits, get_pid_limits, is_good_enough
+from sim.model import CONTROL_INTERVAL, INITIAL_TEMP, SETPOINT, HeatingSimulator
+
+
+class PIDSafetyLimitTests(unittest.TestCase):
+    def test_default_hardware_pid_limits_allow_larger_integral_gain(self):
+        limits = get_pid_limits()
+
+        self.assertEqual(limits["p"]["max"], 1000.0)
+        self.assertEqual(limits["i"]["max"], 250.0)
+        self.assertEqual(limits["d"]["max"], 250.0)
+        self.assertEqual(limits["i"]["max_increase_ratio"], 4.0)
+
+    def test_pid_limits_can_be_overridden_from_config(self):
+        configured_limits = {
+            "default": {
+                "p": {"max": 42.0},
+                "i": {"min": 0.1, "max": 12.0, "max_increase_ratio": 2.0},
+            }
+        }
+
+        with patch.dict(core_config.CONFIG, {"PID_LIMITS": configured_limits}, clear=False):
+            limits = get_pid_limits()
+            safe_pid, _notes = apply_pid_guardrails(
+                {"p": 10.0, "i": 1.0, "d": 1.0},
+                {"p": 100.0, "i": 100.0, "d": 100.0},
+                limits=limits,
+            )
+
+        self.assertEqual(limits["p"]["max"], 42.0)
+        self.assertEqual(limits["i"]["min"], 0.1)
+        self.assertEqual(limits["i"]["max"], 12.0)
+        self.assertEqual(limits["i"]["max_increase_ratio"], 2.0)
+        self.assertEqual(limits["d"]["max"], 250.0)
+        self.assertEqual(safe_pid["p"], 30.0)
+        self.assertEqual(safe_pid["i"], 2.0)
+
+    def test_system_prompt_includes_runtime_pid_limits(self):
+        prompt = get_system_prompt(
+            "hardware",
+            prompt_context={
+                "pid_limits": {
+                    "p": {"min": 0.0, "max": 42.0, "max_increase_ratio": 2.0},
+                    "i": {"min": 0.0, "max": 12.0, "max_increase_ratio": 2.0},
+                    "d": {"min": 0.0, "max": 8.0, "max_increase_ratio": 1.5},
+                }
+            },
+        )
+
+        self.assertIn("PID Guardrails", prompt)
+        self.assertIn("P: min=0", prompt)
+        self.assertIn("max=42", prompt)
+        self.assertIn("max increase per round=2x", prompt)
+
+
+class ConfigLoadTests(unittest.TestCase):
+    def test_defaults_present(self):
+        required_keys = [
+            "SERIAL_PORT",
+            "BAUD_RATE",
+            "HARDWARE_PROFILE",
+            "LLM_API_KEY",
+            "LLM_API_BASE_URL",
+            "LLM_MODEL_NAME",
+            "LLM_PROVIDER",
+            "BUFFER_SIZE",
+            "MAX_TUNING_ROUNDS",
+            "LLM_REQUEST_TIMEOUT",
+            "LLM_DEBUG_OUTPUT",
+            "GOOD_ENOUGH_AVG_ERROR",
+            "GOOD_ENOUGH_STEADY_STATE_ERROR",
+            "GOOD_ENOUGH_OVERSHOOT",
+            "REQUIRED_STABLE_ROUNDS",
+            "MATLAB_MODEL_PATH",
+            "MATLAB_PID_BLOCK_PATH",
+            "MATLAB_ROOT",
+            "MATLAB_OUTPUT_SIGNAL",
+            "MATLAB_OUTPUT_SIGNAL_CANDIDATES",
+            "MATLAB_CONTROL_SIGNAL",
+            "MATLAB_SETPOINT_BLOCK",
+            "MATLAB_SIM_STEP_TIME",
+            "MATLAB_SETPOINT",
+            "PID_LIMITS",
+        ]
+        for key in required_keys:
+            self.assertIn(key, CONFIG, f"CONFIG missing key {key}")
+
+    def test_default_types(self):
+        self.assertIsInstance(CONFIG["BAUD_RATE"], int)
+        self.assertIsInstance(CONFIG["BUFFER_SIZE"], int)
+        self.assertIsInstance(CONFIG["MAX_TUNING_ROUNDS"], int)
+        self.assertIsInstance(CONFIG["LLM_REQUEST_TIMEOUT"], int)
+        self.assertIsInstance(CONFIG["LLM_DEBUG_OUTPUT"], bool)
+        self.assertIsInstance(CONFIG["GOOD_ENOUGH_AVG_ERROR"], float)
+
+    def test_load_config_does_not_raise(self):
+        try:
+            load_config(create_if_missing=False, verbose=False)
+        except Exception as exc:  # pragma: no cover - failure branch
+            self.fail(f"load_config raised: {exc}")
+
+    def test_generated_config_matches_template(self):
+        expected = json.loads(
+            (Path(__file__).parent.parent / "config.example.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        original_config = dict(core_config.CONFIG)
+        original_cwd = os.getcwd()
+        generated = None
+
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                os.chdir(temp_dir)
+                core_config.CONFIG.clear()
+                core_config.CONFIG.update(DEFAULT_CONFIG)
+                core_config.load_config(create_if_missing=True, verbose=False)
+                generated = json.loads(
+                    Path("config.json").read_text(encoding="utf-8")
+                )
+                os.chdir(original_cwd)
+        finally:
+            os.chdir(original_cwd)
+            core_config.CONFIG.clear()
+            core_config.CONFIG.update(original_config)
+
+        self.assertEqual(generated, expected)
+
+    def test_load_config_updates_imported_config_reference_in_place(self):
+        imported_config = CONFIG
+        original_config = dict(core_config.CONFIG)
+        original_cwd = os.getcwd()
+        loaded_base_url = None
+        loaded_model_name = None
+
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                os.chdir(temp_dir)
+                Path("config.json").write_text(
+                    json.dumps(
+                        {
+                            "LLM_API_BASE_URL": "http://127.0.0.1:8000/v1",
+                            "LLM_MODEL_NAME": "demo-model",
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                core_config.load_config(create_if_missing=False, verbose=False)
+                loaded_base_url = imported_config["LLM_API_BASE_URL"]
+                loaded_model_name = imported_config["LLM_MODEL_NAME"]
+                os.chdir(original_cwd)
+        finally:
+            os.chdir(original_cwd)
+            core_config.CONFIG.clear()
+            core_config.CONFIG.update(original_config)
+
+        self.assertIs(imported_config, core_config.CONFIG)
+        self.assertEqual(loaded_base_url, "http://127.0.0.1:8000/v1")
+        self.assertEqual(loaded_model_name, "demo-model")
+
+
+class LLMFallbackTests(unittest.TestCase):
+    def _make_tuner_without_sdk(self, provider: str = "openai") -> LLMTuner:
+        with patch.dict("sys.modules", {"openai": None, "anthropic": None}):
+            return LLMTuner("fake-key", "https://fake.api/v1", "gpt-mock", provider)
+
+    def test_fallback_when_sdk_missing(self):
+        tuner = self._make_tuner_without_sdk("openai")
+        self.assertFalse(tuner.use_sdk)
+
+    def test_parse_json_extracts_pid(self):
+        from llm.response_parser import parse_json_response
+        raw = '{"p": 1.5, "i": 0.2, "d": 0.01, "status": "TUNING", "analysis_summary": "ok"}'
+        result = parse_json_response(raw)
+        self.assertIsNotNone(result)
+        self.assertAlmostEqual(result["p"], 1.5)  # type: ignore[index]
+        self.assertAlmostEqual(result["i"], 0.2)  # type: ignore[index]
+        self.assertAlmostEqual(result["d"], 0.01)  # type: ignore[index]
+
+    def test_parse_json_rejects_negative_pid(self):
+        from llm.response_parser import parse_json_response
+        raw = '{"p": -1.0, "i": 0.1, "d": 0.05, "status": "TUNING"}'
+        result = parse_json_response(raw)
+        self.assertIsNotNone(result)
+        self.assertNotIn("p", result)  # type: ignore[operator]
+
+
+    def test_parse_json_accepts_dual_controller_shape(self):
+        from llm.response_parser import parse_json_response
+        raw = '{"controller_1":{"p":1.5,"i":0.2,"d":0.01},"controller_2":{"p":2.5,"i":0.3,"d":0.02},"status":"TUNING","analysis_summary":"ok"}'
+        result = parse_json_response(raw)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["controller_1"]["p"], 1.5)  # type: ignore[index]
+        self.assertEqual(result["controller_2"]["i"], 0.3)  # type: ignore[index]
+
+    def test_json_stream_formatter_displays_both_dual_controller_sections(self):
+        rendered_chunks: list[str] = []
+        formatter = JSONStreamFormatter(writer=rendered_chunks.append)
+
+        formatter.process(
+            '{"analysis_summary":"ok","controller_1":{"p":1.0,"i":0.1,"d":0.01},"controller_2":{"p":2.0,"i":0.2,"d":0.02},"status":"TUNING"}'
+        )
+
+        rendered = "".join(rendered_chunks)
+        self.assertIn("P=1.0, I=0.1, D=0.01", rendered)
+        self.assertIn("P=2.0, I=0.2, D=0.02", rendered)
+
+
+    def test_provider_resolution_anthropic(self):
+        tuner = self._make_tuner_without_sdk("anthropic")
+        self.assertEqual(tuner.provider, "anthropic")
+
+    def test_http_stream_callback_emits_done_once(self):
+        done_updates = []
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, _exc_type, _exc_val, _exc_tb):
+                return None
+
+            def raise_for_status(self):
+                return None
+
+            def iter_lines(self):
+                yield b'data: {"choices":[{"delta":{"content":"{\\"status\\":\\"DONE\\"}"}}]}'
+                yield b"data: [DONE]"
+
+        class FakeRequests:
+            def post(self, *args, **kwargs):
+                return FakeResponse()
+
+        from llm.providers import HTTPFallbackProvider
+        tuner = self._make_tuner_without_sdk("openai")
+        tuner.llm_client = HTTPFallbackProvider(
+            tuner.api_key, tuner.base_url, tuner.model, tuner.timeout, is_anthropic=False, requests_module=FakeRequests()
+        )
+        tuner.stream_callback = lambda _text, done: done_updates.append(done)
+
+        result = tuner._execute_request(
+            [{"role": "user", "content": "hello"}],
+            [{"role": "user", "content": "hello"}],
+        )
+
+        self.assertEqual(result, '{"status":"DONE"}')
+        self.assertEqual(done_updates.count(True), 1)
+
+    def test_sdk_stream_ignores_null_delta_summary_chunk(self):
+        class FakeDelta:
+            def __init__(self, content):
+                self.content = content
+
+        class FakeMessage:
+            def __init__(self, content):
+                self.content = content
+
+        class FakeChoice:
+            def __init__(self, *, delta=None, message=None):
+                self.delta = delta
+                self.message = message
+
+        class FakeChunk:
+            def __init__(self, choice):
+                self.choices = [choice]
+
+        chunks = [
+            FakeChunk(FakeChoice(delta=FakeDelta('{"status":"'))),
+            FakeChunk(FakeChoice(delta=FakeDelta('DONE"}'))),
+            FakeChunk(FakeChoice(delta=None, message=FakeMessage('{"status":"DONE"}'))),
+        ]
+
+        tuner = self._make_tuner_without_sdk("openai")
+        from llm.providers import OpenAISDKProvider
+        tuner.llm_client = OpenAISDKProvider(tuner.api_key, tuner.base_url, tuner.model, tuner.timeout)
+        tuner.use_sdk = True
+        tuner.client = types.SimpleNamespace(
+            chat=types.SimpleNamespace(
+                completions=types.SimpleNamespace(create=lambda **kwargs: iter(chunks))
+            )
+        )
+        tuner.llm_client.client = tuner.client
+
+        result = tuner._execute_request(
+            [{"role": "user", "content": "hello"}],
+            [{"role": "user", "content": "hello"}],
+        )
+
+        self.assertEqual(result, '{"status":"DONE"}')
+
+    def test_sdk_stream_accepts_message_only_chunk(self):
+        class FakeChoice:
+            def __init__(self, *, message=None):
+                self.delta = None
+                self.message = message
+
+        class FakeMessage:
+            def __init__(self, content):
+                self.content = content
+
+        class FakeChunk:
+            def __init__(self, content):
+                self.choices = [FakeChoice(message=FakeMessage(content))]
+
+        tuner = self._make_tuner_without_sdk("openai")
+        from llm.providers import OpenAISDKProvider
+        tuner.llm_client = OpenAISDKProvider(tuner.api_key, tuner.base_url, tuner.model, tuner.timeout)
+        tuner.use_sdk = True
+        tuner.client = types.SimpleNamespace(
+            chat=types.SimpleNamespace(
+                completions=types.SimpleNamespace(
+                    create=lambda **kwargs: iter([FakeChunk('{"status":"DONE"}')])
+                )
+            )
+        )
+        tuner.llm_client.client = tuner.client
+
+        result = tuner._execute_request(
+            [{"role": "user", "content": "hello"}],
+            [{"role": "user", "content": "hello"}],
+        )
+
+        self.assertEqual(result, '{"status":"DONE"}')
+
+
+class PromptSelectionTests(unittest.TestCase):
+    def test_normalize_tuning_mode_maps_known_aliases(self):
+        self.assertEqual(normalize_tuning_mode("python"), "python_sim")
+        self.assertEqual(normalize_tuning_mode("simulink"), "simulink")
+        self.assertEqual(normalize_tuning_mode("serial"), "hardware")
+
+    def test_simulink_system_prompt_mentions_placeholder_pwm(self):
+        prompt = get_system_prompt("simulink")
+        self.assertIn("Simulink", prompt)
+        self.assertIn("PWM", prompt)
+        self.assertIn("0.0", prompt)
+
+    def test_user_prompt_includes_mode_context(self):
+        prompt = build_user_prompt(
+            "## Current Status\n- Current PID: P=1.0, I=0.1, D=0.05",
+            "No tuning history yet.",
+            tuning_mode="hardware",
+            prompt_context={
+                "serial_port": "COM9",
+                "pwm_signal_available": True,
+            },
+        )
+
+        self.assertIn("hardware", prompt)
+        self.assertIn("serial port: COM9", prompt)
+        self.assertIn("pwm signal available", prompt)
+
+    def test_user_prompt_uses_dual_controller_output_fields_when_requested(self):
+        prompt = build_user_prompt(
+            "## Current Status\n- controller data",
+            "No tuning history yet.",
+            tuning_mode="simulink",
+            prompt_context={
+                "controller_count": 2,
+                "controller_2_path": "demo/Inner PID",
+            },
+        )
+
+        self.assertIn("controller_1、controller_2、status", prompt)
+        self.assertNotIn("tuning_action、p、i、d、status", prompt)
+        self.assertIn("双控制器调参策略", prompt)
+
+    def test_hardware_user_prompt_carries_profile_metadata(self):
+        prompt = build_user_prompt(
+            "## Current Status\n- Current PID: P=1.0, I=0.1, D=0.05",
+            "No tuning history yet.",
+            tuning_mode="hardware",
+            prompt_context={
+                "serial_port": "COM9",
+                "hardware_profile": "stm32f407_openmv",
+                "board_family": "stm32f407",
+                "hardware_profile_note": "STM32F407 status console with OpenMV target stream.",
+                "controller_count": 2,
+            },
+        )
+
+        self.assertIn("hardware profile: stm32f407_openmv", prompt)
+        self.assertIn("board family: stm32f407", prompt)
+        self.assertIn("OpenMV target stream", prompt)
+        self.assertIn("controller_1、controller_2、status", prompt)
+
+    def test_simulink_user_prompt_uses_consistent_five_percent_target(self):
+        prompt = build_user_prompt(
+            "## Current Status\n- Current PID: P=1.0, I=0.1, D=0.05",
+            "No tuning history yet.",
+            tuning_mode="simulink",
+        )
+
+        self.assertIn("超调 <5%", prompt)
+        self.assertNotIn("超调 <3%", prompt)
+        self.assertIn("单控制器调参策略", prompt)
+
+
+class TuningSessionHistoryTests(unittest.TestCase):
+    def test_is_good_enough_accepts_zero_error_and_zero_overshoot(self):
+        self.assertTrue(
+            is_good_enough(
+                {
+                    "avg_error": 0.0,
+                    "steady_state_error": 0.0,
+                    "overshoot": 0.0,
+                    "status": "STABLE",
+                },
+                {
+                    "avg_error_threshold": 1.0,
+                    "steady_state_error_threshold": 0.5,
+                    "overshoot_threshold": 2.0,
+                },
+            )
+        )
+
+    def test_finalize_decision_records_pid_that_generated_metrics(self):
+        state = create_tuning_session(
+            initial_pid={"p": 1.0, "i": 0.0, "d": 0.0},
+            setpoint=200.0,
+        )
+        evaluation = RoundEvaluation(
+            round_index=1,
+            metrics={"avg_error": 148.26, "steady_state_error": 130.41, "overshoot": 0.0, "status": "SLOW_RESPONSE"},
+            current_pid={"p": 1.0, "i": 0.0, "d": 0.0},
+            stable_rounds=0,
+        )
+
+        finalize_decision(
+            state,
+            evaluation,
+            {
+                "analysis_summary": "Increase gains.",
+                "thought_process": "Round 1 was too slow.",
+                "tuning_action": "ADJUST_PID",
+                "p": 15.0,
+                "i": 1.0,
+                "d": 5.0,
+                "status": "TUNING",
+            },
+        )
+
+        record = state.history.history[0]
+        self.assertEqual(record["pid"], {"p": 1.0, "i": 0.0, "d": 0.0})
+        self.assertEqual(record["metrics"]["avg_error"], 148.26)
+        self.assertEqual(state.buffer.current_pid["p"], 3.0)
+
+    def test_dual_loop_rollback_restores_both_controllers(self):
+        """When a dual-controller round regresses, apply_rollback must also
+        restore the secondary PID that was in effect at the best round.
+        Regression test for the bug where rollback kept the last (bad)
+        controller_2 suggestion."""
+        state = create_tuning_session(
+            initial_pid={"p": 1.0, "i": 0.1, "d": 0.05},
+            setpoint=200.0,
+        )
+        # Round 1: Good stable metrics, dual loop active.
+        state.buffer.secondary_pid = {"p": 2.0, "i": 0.2, "d": 0.02}
+        from pid_safety import maybe_update_best_result
+        state.best_result = maybe_update_best_result(
+            None,
+            {"p": 1.0, "i": 0.1, "d": 0.05},
+            {"avg_error": 3.0, "steady_state_error": 1.0, "overshoot": 0.0,
+             "max_error": 5.0, "status": "STABLE"},
+            round_num=1,
+            secondary_pid={"p": 2.0, "i": 0.2, "d": 0.02},
+        )
+        self.assertIn("secondary_pid", state.best_result)
+        self.assertEqual(
+            state.best_result["secondary_pid"], {"p": 2.0, "i": 0.2, "d": 0.02}
+        )
+
+        # Round 2: bad dual PID applied (regressed).
+        state.buffer.current_pid = {"p": 9.0, "i": 9.0, "d": 9.0}
+        state.buffer.secondary_pid = {"p": 8.0, "i": 8.0, "d": 8.0}
+
+        # Simulate apply_rollback using the best-round secondary.
+        from core.tuning_session import apply_rollback
+        apply_rollback(
+            state,
+            {"p": 1.0, "i": 0.1, "d": 0.05},
+            rollback_secondary_pid={"p": 2.0, "i": 0.2, "d": 0.02},
+        )
+        self.assertEqual(state.buffer.current_pid, {"p": 1.0, "i": 0.1, "d": 0.05})
+        # Secondary must be restored to the best-round values, not left at
+        # the bad round-2 suggestion.
+        self.assertEqual(state.buffer.secondary_pid, {"p": 2.0, "i": 0.2, "d": 0.02})
+
+    def test_single_loop_rollback_leaves_secondary_untouched(self):
+        """Single-loop tuning must not touch buffer.secondary_pid on rollback."""
+        state = create_tuning_session(
+            initial_pid={"p": 1.0, "i": 0.1, "d": 0.05},
+            setpoint=200.0,
+        )
+        self.assertIsNone(state.buffer.secondary_pid)
+        from core.tuning_session import apply_rollback
+        apply_rollback(state, {"p": 0.5, "i": 0.05, "d": 0.02})
+        self.assertEqual(state.buffer.current_pid, {"p": 0.5, "i": 0.05, "d": 0.02})
+        self.assertIsNone(state.buffer.secondary_pid)
+
+    def test_record_rollback_round_keeps_failed_pid_in_history(self):
+        state = create_tuning_session(
+            initial_pid={"p": 25.0, "i": 9.5, "d": 4.5},
+            setpoint=200.0,
+        )
+        evaluation = RoundEvaluation(
+            round_index=6,
+            metrics={"avg_error": 93.0, "steady_state_error": 8.0, "overshoot": 4.6, "status": "STABLE"},
+            current_pid={"p": 25.0, "i": 9.5, "d": 4.5},
+            stable_rounds=0,
+            best_result={"round": 5, "pid": {"p": 22.0, "i": 8.0, "d": 5.0}, "metrics": {"avg_error": 60.88}},
+            rollback_pid={"p": 22.0, "i": 8.0, "d": 5.0},
+        )
+
+        summary = record_rollback_round(
+            state,
+            evaluation,
+            {"p": 22.0, "i": 8.0, "d": 5.0},
+            target_round=5,
+        )
+
+        record = state.history.history[0]
+        self.assertEqual(record["pid"], {"p": 25.0, "i": 9.5, "d": 4.5})
+        self.assertEqual(record["metrics"]["avg_error"], 93.0)
+        self.assertIn("Automatic rollback triggered", record["analysis"])
+        self.assertIn("round 5", summary)
+
+    def test_finalize_decision_allows_simulink_five_x_p_step(self):
+        state = create_tuning_session(
+            initial_pid={"p": 100.0, "i": 0.5, "d": 0.0},
+            setpoint=200.0,
+        )
+        evaluation = RoundEvaluation(
+            round_index=1,
+            metrics={
+                "avg_error": 5.0,
+                "steady_state_error": 1.8,
+                "overshoot": 0.0,
+                "status": "SLOW_RESPONSE",
+            },
+            current_pid={"p": 100.0, "i": 0.5, "d": 0.0},
+            stable_rounds=0,
+        )
+
+        decision = finalize_decision(
+            state,
+            evaluation,
+            {
+                "analysis_summary": "Increase P aggressively for Simulink.",
+                "thought_process": "Current P is too low.",
+                "tuning_action": "BOOST_RESPONSE",
+                "p": 500.0,
+                "i": 0.5,
+                "d": 0.0,
+                "status": "TUNING",
+            },
+            limits=get_pid_limits("simulink"),
+        )
+
+        self.assertEqual(decision.safe_pid["p"], 500.0)
+        self.assertEqual(state.buffer.current_pid["p"], 500.0)
+
+    def test_finalize_decision_reports_simulink_p_upper_limit(self):
+        state = create_tuning_session(
+            initial_pid={"p": 5000.0, "i": 0.5, "d": 0.0},
+            setpoint=200.0,
+        )
+        evaluation = RoundEvaluation(
+            round_index=1,
+            metrics={
+                "avg_error": 5.0,
+                "steady_state_error": 1.8,
+                "overshoot": 0.0,
+                "status": "SLOW_RESPONSE",
+            },
+            current_pid={"p": 5000.0, "i": 0.5, "d": 0.0},
+            stable_rounds=0,
+        )
+
+        decision = finalize_decision(
+            state,
+            evaluation,
+            {
+                "analysis_summary": "Try increasing P again.",
+                "thought_process": "Current P is still too low.",
+                "tuning_action": "BOOST_RESPONSE",
+                "p": 6000.0,
+                "i": 0.5,
+                "d": 0.0,
+                "status": "TUNING",
+            },
+            limits=get_pid_limits("simulink"),
+        )
+
+        self.assertEqual(decision.safe_pid["p"], 5000.0)
+        self.assertIn("P 已达上限 5000.0000", "; ".join(decision.guardrail_notes))
+
+
+    def test_adapt_simulink_pid_limits_keeps_base_limits_without_discrete_hints(self):
+        base_limits = get_pid_limits("simulink")
+
+        adapted = adapt_simulink_pid_limits(
+            base_limits,
+            control_domain="continuous_like",
+            controller_1_sample_time="",
+            controller_2_sample_time="",
+            model_fixed_step="",
+        )
+
+        self.assertEqual(adapted, base_limits)
+
+    def test_adapt_simulink_pid_limits_tightens_i_and_d_for_fast_discrete_loops(self):
+        base_limits = get_pid_limits("simulink")
+
+        adapted = adapt_simulink_pid_limits(
+            base_limits,
+            control_domain="discrete",
+            controller_1_sample_time="0.001",
+            controller_2_sample_time="-1",
+            model_fixed_step="0.01",
+        )
+
+        self.assertEqual(
+            adapted["p"]["max_increase_ratio"],
+            base_limits["p"]["max_increase_ratio"],
+        )
+        self.assertLess(
+            adapted["i"]["max_increase_ratio"],
+            base_limits["i"]["max_increase_ratio"],
+        )
+        self.assertLess(
+            adapted["d"]["max_increase_ratio"],
+            base_limits["d"]["max_increase_ratio"],
+        )
+        self.assertGreaterEqual(adapted["i"]["max_increase_ratio"], 1.25)
+        self.assertGreaterEqual(adapted["d"]["max_increase_ratio"], 1.25)
+
+
+class BufferTests(unittest.TestCase):
+    def _make_data_point(self, temp: float, setpoint: float = 200.0) -> dict:
+        return {
+            "timestamp": 0,
+            "setpoint": setpoint,
+            "input": temp,
+            "pwm": 100.0,
+            "error": setpoint - temp,
+        }
+
+    def test_is_full_after_max_size(self):
+        buf = AdvancedDataBuffer(max_size=5)
+        for index in range(5):
+            buf.add(self._make_data_point(float(index)))
+        self.assertTrue(buf.is_full())
+
+    def test_not_full_before_max_size(self):
+        buf = AdvancedDataBuffer(max_size=5)
+        buf.add(self._make_data_point(100.0))
+        self.assertFalse(buf.is_full())
+
+    def test_reset_clears_buffer(self):
+        buf = AdvancedDataBuffer(max_size=5)
+        for index in range(5):
+            buf.add(self._make_data_point(float(index)))
+        buf.reset()
+        self.assertFalse(buf.is_full())
+        self.assertEqual(len(buf.buffer), 0)
+
+    def test_metrics_not_empty_when_full(self):
+        buf = AdvancedDataBuffer(max_size=10)
+        for index in range(10):
+            buf.add(self._make_data_point(100.0 + index, setpoint=200.0))
+        metrics = buf.calculate_advanced_metrics()
+        self.assertIn("avg_error", metrics)
+        self.assertGreater(metrics["avg_error"], 0)
+
+    def test_metrics_empty_when_no_data(self):
+        buf = AdvancedDataBuffer(max_size=10)
+        self.assertEqual(buf.calculate_advanced_metrics(), {})
+
+    def test_to_prompt_data_omits_secondary_pid_when_none(self):
+        buf = AdvancedDataBuffer(max_size=5)
+        for index in range(5):
+            buf.add(self._make_data_point(float(index), setpoint=100.0))
+        text = buf.to_prompt_data()
+        self.assertNotIn("controller_2", text)
+
+    def test_to_prompt_data_emits_secondary_pid_when_set(self):
+        buf = AdvancedDataBuffer(max_size=5)
+        for index in range(5):
+            buf.add(self._make_data_point(float(index), setpoint=100.0))
+        buf.secondary_pid = {"p": 2.5, "i": 0.4, "d": 0.08}
+        text = buf.to_prompt_data()
+        self.assertIn("controller_2", text)
+        self.assertIn("2.5", text)
+        self.assertIn("0.4", text)
+        self.assertIn("0.08", text)
+
+    def test_to_prompt_data_includes_dual_axis_hardware_fields_when_present(self):
+        buf = AdvancedDataBuffer(max_size=5)
+        buf.add(
+            {
+                "timestamp": 1,
+                "setpoint": 123.0,
+                "input": 750.0,
+                "pwm": 6.0,
+                "error": -627.0,
+                "target_x": 123,
+                "target_y": 456,
+                "offset_x": 43,
+                "offset_y": 396,
+                "servo_x": 750.0,
+                "servo_y": 480.0,
+            }
+        )
+
+        text = buf.to_prompt_data()
+
+        self.assertIn("TargetX", text)
+        self.assertIn("TargetY", text)
+        self.assertIn("OffsetX", text)
+        self.assertIn("OffsetY", text)
+        self.assertIn("ServoX", text)
+        self.assertIn("ServoY", text)
+        self.assertIn("123", text)
+        self.assertIn("456", text)
+
+
+class SimulatorStepTests(unittest.TestCase):
+    def test_constants_reasonable(self):
+        self.assertGreater(SETPOINT, 0)
+        self.assertGreater(INITIAL_TEMP, 0)
+        self.assertLess(INITIAL_TEMP, SETPOINT)
+        self.assertGreater(CONTROL_INTERVAL, 0)
+        self.assertLess(CONTROL_INTERVAL, 1.0)
+
+    def test_temp_increases_with_full_pwm(self):
+        sim = HeatingSimulator(kp=10.0, ki=0.0, kd=0.0, random_seed=7)
+        sim.pwm = 255.0
+        for _ in range(50):
+            sim.update()
+        self.assertGreater(sim.temp, INITIAL_TEMP + 1.0)
+
+    def test_temp_non_negative_after_many_steps(self):
+        sim = HeatingSimulator(kp=2.0, ki=0.1, kd=0.05, random_seed=42)
+        for _ in range(500):
+            sim.compute_pid()
+            sim.update()
+        self.assertGreaterEqual(sim.temp, 0.0)
+
+    def test_temp_does_not_diverge(self):
+        sim = HeatingSimulator(kp=2.0, ki=0.1, kd=0.05, random_seed=42)
+        for _ in range(500):
+            sim.compute_pid()
+            sim.update()
+        self.assertLess(sim.temp, 600.0)
+
+    def test_get_data_returns_required_keys(self):
+        sim = HeatingSimulator(random_seed=7)
+        data = sim.get_data()
+        for key in ("timestamp", "setpoint", "input", "pwm", "error", "p", "i", "d"):
+            self.assertIn(key, data)
+
+    def test_set_pid_updates_parameters(self):
+        sim = HeatingSimulator(random_seed=7)
+        sim.set_pid(3.0, 0.5, 0.2)
+        self.assertAlmostEqual(sim.kp, 3.0)
+        self.assertAlmostEqual(sim.ki, 0.5)
+        self.assertAlmostEqual(sim.kd, 0.2)
+
+    def test_simulator_accepts_custom_setpoint(self):
+        sim = HeatingSimulator(setpoint=300.0, random_seed=7)
+        data = sim.get_data()
+        self.assertEqual(data["setpoint"], 300.0)
+        self.assertAlmostEqual(data["error"], 300.0 - sim.temp)
+
+    def test_same_seed_reproduces_same_temperature_trace(self):
+        left = HeatingSimulator(random_seed=123)
+        right = HeatingSimulator(random_seed=123)
+
+        left_trace = []
+        right_trace = []
+        for _ in range(60):
+            left.compute_pid()
+            left.update()
+            right.compute_pid()
+            right.update()
+            left_trace.append(round(left.temp, 6))
+            right_trace.append(round(right.temp, 6))
+
+        self.assertEqual(left_trace, right_trace)
+
+    def test_warm_start_updates_initial_pid(self):
+        sim = HeatingSimulator(random_seed=7)
+        pid = simulator._run_simulator_warm_start(sim, emit_console=False)
+        self.assertIsNotNone(pid)
+        self.assertGreater(sim.kp, 0.0)
+        self.assertGreaterEqual(sim.ki, 0.0)
+        self.assertGreaterEqual(sim.kd, 0.0)
+
+
+if __name__ == "__main__":
+    unittest.main()

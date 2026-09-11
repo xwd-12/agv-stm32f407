@@ -1,0 +1,18 @@
+{
+    "SERIAL_PORT": "AUTO",
+    "BAUD_RATE": 115200,
+    "HARDWARE_PROFILE": "stm32f407_openmv",
+    "LLM_API_KEY": "your-api-key-here",
+    "LLM_API_BASE_URL": "https://api.deepseek.com/v1",
+    "LLM_MODEL_NAME": "deepseek-chat",
+    "LLM_PROVIDER": "deepseek",
+    "HTTP_PROXY": "",
+    "HTTPS_PROXY": "",
+    "ALL_PROXY": "",
+    "NO_PROXY": "",
+    "BUFFER_SIZE": 100,
+    "MIN_ERROR_THRESHOLD": 0.3,
+    "MAX_TUNING_ROUNDS": 50,
+    "LLM_REQUEST_TIMEOUT": 60,
+    "LLM_DEBUG_OUTPUT": false
+}

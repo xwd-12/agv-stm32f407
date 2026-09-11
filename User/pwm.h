@@ -10,8 +10,8 @@
 // ���ͨ��������
 #define SERVO_WAIST        4   // �������
 #define SERVO_SHOULDER     5   // ��۶��
-#define SERVO_ELBOW        6   // С�۶�� (已废弃, PA10复用作挂钩)
-#define SERVO_HOOK         6   // 挂钩舵机 PA10 TIM1_CH3 (复用废弃小臂通道)
+#define SERVO_ELBOW        6   // 旧小臂 (PA10, 已废弃)
+#define SERVO_HOOK         9   // 挂钩舵机 PA3 TIM9_CH2
 #define SERVO_GRIPPER      7   // ��צ���
 #define SERVO_ELBOW_PA2    8   // 小臂舵机 PA2 (TIM9_CH1)
 void Pwm_TIM_Init(void);

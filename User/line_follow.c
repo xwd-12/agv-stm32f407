@@ -93,9 +93,41 @@ void LineFollow_Task(Line_follow_Handle*lf,volatile int16_t target_speed[4])
 			return;
 		}
 		lost_cnt = 0;
+	/* sancha fork (left+right on, center off) -> default turn LEFT, once per junction */
+	{
+		static uint8_t fork_hold = 0;
+		static uint8_t fork_tick = 0;
+		static uint8_t fork_armed = 1;
+		uint8_t left_on, right_on;
+		left_on  = states[3] || states[4];
+		right_on = states[0] || states[1];
+		/* Ö»ÔÚÖ±ĞĞÖĞ´¥·¢(×î½üÎó²î¡Ö0): ÍäµÀÖĞ²»´¥·¢, PIDÕı³£×ªÍä */
+		if (left_on && right_on && !states[2]
+		    && last_turn_dir > -0.5f && last_turn_dir < 0.5f) {
+			if (fork_armed) {
+				fork_armed = 0;
+				fork_hold = 1;
+				fork_tick = 0;
+			}
+		} else {
+			fork_armed = 1;   /* Àë¿ªÂ·¿Ú¸´Î», ÏÂ¸öÂ·¿Ú¿ÉÔÙ´¥·¢ */
+		}
+		if (fork_hold) {
+			fork_tick++;
+			target_speed[0] = 120;
+			target_speed[1] = 500;
+			target_speed[2] = 120;
+			target_speed[3] = 470;
+			if (fork_tick >= 40 || states[2]) {
+				fork_hold = 0;
+			}
+			return;
+		}
+	}
+
 
 	error = LineSensor_CalcError(states);
-		/* å¼¯é“æ£€æµ‹: â‰¤4ä¸ªä¼ æ„Ÿå™¨æ£€æµ‹åˆ°çº¿ä¸”ä¿æŒ3å¸§åˆ¤å®šä¸ºå¼¯é“ */
+		/* å¼¯é“æ£€æµ? â‰?ä¸ªä¼ æ„Ÿå™¨æ£€æµ‹åˆ°çº¿ä¸”ä¿æŒ3å¸§åˆ¤å®šä¸ºå¼¯é“ */
 			{
 				static uint8_t curve_db = 0;
 				if (detected <= 4) {
@@ -116,7 +148,7 @@ void LineFollow_Task(Line_follow_Handle*lf,volatile int16_t target_speed[4])
 				}
 				if (lf->curve_cooldown > 0) lf->curve_cooldown--;
 			}
-		/* åˆ°è¾¾ç›®æ ‡å¼¯é“+å»¶æ—¶åç½®ä½ */
+		/* åˆ°è¾¾ç›®æ ‡å¼¯é“+å»¶æ—¶åç½®ä½?*/
 		if (lf->curve_target > 0 && lf->curve_count >= lf->curve_target && lf->curve_done_tick > 0) {
 			if (g_sys_tick - lf->curve_done_tick >= (uint32_t)(lf->curve_delay_ms / 10)) {
 				lf->curve_ready = 1;
@@ -161,10 +193,16 @@ void LineFollow_Task(Line_follow_Handle*lf,volatile int16_t target_speed[4])
 	last_right = right;
 		last_turn_dir = error;
 
-	target_speed[0] = left;
-	target_speed[1] = right;
-	target_speed[2] = left;
-	/* å³åç¼–ç å™¨å, å¼€ç¯åå¿«, å•ç‹¬å‡20è¡¥å¿ */
+		target_speed[0] = left;
+		target_speed[1] = right;
+		/* ×óºóÂÖ¹ÕÍä²¹³¥: ×ªÍäÊ±¶à¸øÁ¦(ÓÃ»§: ¹ÕÍä×ª²»ÆğÀ´) */
+		if (turn > 20.0f || turn < -20.0f) {
+			target_speed[2] = left + 30;
+			if (target_speed[2] > 1000) target_speed[2] = 1000;
+		} else {
+			target_speed[2] = left;
+		}
+	/* å³åç¼–ç å™¨å, å¼€ç¯åå¿? å•ç‹¬å‡?0è¡¥å¿ */
 	{
 		int16_t rr;
 		rr = right + lf->rr_offset;

@@ -2,23 +2,13 @@
 #define  __state_machine_h
 #include "stm32f4xx.h"
 
-// AGVå¯¼èˆªä»»åŠ¡çŠ¶æ€æšä¸¾
+// »úĞµ±Û×´Ì¬Ã¶¾Ù
 typedef enum {
-    TASK_IDLE = 0,
-    TASK_GO_TO_A,       // line-follow to point A
-    TASK_GRASP,         // arm grasp at A
-    TASK_GO_TO_B,       // line-follow to point B
-    TASK_PLACE,         // arm place at B
-    TASK_DONE           // mission complete
-} TaskNavState;
-
-// æœºæ¢°è‡‚çŠ¶æ€æšä¸¾
-typedef enum {
-    ARM_IDLE = 0,       // ç©ºé—²
-    ARM_GRASPING,       // æŠ“å–ä¸­
-    ARM_PLACING,        // æŠ•æ”¾ä¸­
-    ARM_RESETTING,      // å¤ä½ä¸­
-    ARM_ESTOP           // æ€¥åœ
+    ARM_IDLE = 0,       // ¿ÕÏĞ
+    ARM_GRASPING,       // ×¥È¡ÖĞ
+    ARM_PLACING,        // Í¶·ÅÖĞ
+    ARM_RESETTING,      // ¸´Î»ÖĞ
+    ARM_ESTOP           // ¼±Í£
 } ArmState;
 
 void  ArmSM_Init(void);
@@ -28,47 +18,37 @@ uint8_t ArmSM_RequestPlace(uint16_t waist_angle);
 uint8_t ArmSM_RequestReset(void);
 void  ArmSM_EmergencyStop(void);
 void  ArmSM_NotifyComplete(void);
-void  ArmSM_Tick10ms(void);            // 10mså®šæ—¶å™¨è°ƒç”¨, è¶…æ—¶æ£€æµ‹
+void  ArmSM_Tick10ms(void);            // 10ms¶¨Ê±Æ÷µ÷ÓÃ, ³¬Ê±¼ì²â
 uint8_t ArmSM_IsBusy(void);
 const char* ArmSM_StateName(ArmState s);
 
-// ---- AGV Task Navigation API ----
-void  TaskNav_Init(void);
-void  TaskNav_Start(int32_t dist_a, int32_t dist_b);
-void  TaskNav_Stop(void);
-void  TaskNav_Process(void);           // call in main loop (non-blocking except arm actions)
-TaskNavState TaskNav_GetState(void);
-int32_t TaskNav_GetProgress(void);     // current encoder distance traveled
-int32_t TaskNav_GetTarget(void);       // current segment target distance
-const char* TaskNav_StateName(TaskNavState s);
-
-// ===== åŠ¨ä½œç±»å‹ =====
+// ===== ¶¯×÷ÀàĞÍ =====
 #define ACTION_NONE    0
 #define ACTION_GRASP   1
 #define ACTION_PLACE   2
-#define ACTION_HOOK    3   // å‹¾ä»è½¦(é¢„ç•™)
-#define ACTION_UNHOOK  4   // è„±ä»è½¦(é¢„ç•™)
+#define ACTION_HOOK    3   // ¹´´Ó³µ (ÒÑÊµÏÖ: Action_HookTrailer)
+#define ACTION_UNHOOK  4   // ÍÑ´Ó³µ (ÒÑÊµÏÖ: Action_UnhookTrailer)
 
-// ===== ä»»åŠ¡æ­¥éª¤ =====
+// ===== ÈÎÎñ²½Öè =====
 typedef struct {
-    uint8_t  travel_mode;    // 0=ç¼–ç å™¨é‡Œç¨‹, 1=å·¡çº¿
-    int32_t  encoder_dist;   // é‡Œç¨‹ç›®æ ‡è·ç¦»(ç¼–ç å™¨è®¡æ•°)
-    int16_t  tag_id;         // AprilTag ID (-1=ä¸åœé )
-    int16_t  dock_distance;  // è§†è§‰å¯¹æ¥åœé è·ç¦»(cm)
-    uint8_t  action;         // ACTION_* åŠ¨ä½œ
-    int16_t  action_param;   // åŠ¨ä½œå‚æ•°(å¦‚æ”¾ç½®è§’åº¦)
+    uint8_t  travel_mode;    // 0=±àÂëÆ÷Àï³Ì, 1=Ñ²Ïß
+    int32_t  encoder_dist;   // Àï³ÌÄ¿±ê¾àÀë(±àÂëÆ÷¼ÆÊı)
+    int16_t  tag_id;         // AprilTag ID (-1=²»Í£¿¿)
+    int16_t  dock_distance;  // ÊÓ¾õ¶Ô½ÓÍ£¿¿¾àÀë(cm)
+    uint8_t  action;         // ACTION_* ¶¯×÷
+    int16_t  action_param;   // ¶¯×÷²ÎÊı(Èç·ÅÖÃ½Ç¶È)
 } TaskStep;
 
-// ===== ä»»åŠ¡é˜Ÿåˆ—(æœ€å¤š16æ­¥) =====
+// ===== ÈÎÎñ¶ÓÁĞ(×î¶à16²½) =====
 #define TASK_QUEUE_MAX  16
 
 typedef enum {
     TQ_IDLE = 0,
-    TQ_TRAVEL,          // å·¡çº¿/é‡Œç¨‹èµ°å‘å·¥ä½
-    TQ_DOCK,            // è§†è§‰å¯¹æ¥
-    TQ_ACTION,          // æ‰§è¡ŒåŠ¨ä½œ
+    TQ_TRAVEL,          // Ñ²Ïß/Àï³Ì×ßÏò¹¤Î»
+    TQ_DOCK,            // ÊÓ¾õ¶Ô½Ó
+    TQ_ACTION,          // Ö´ĞĞ¶¯×÷
     TQ_DONE,
-    TQ_ERROR            // è¶…æ—¶/ä¸¢å¤±
+    TQ_ERROR            // ³¬Ê±/¶ªÊ§
 } TaskQueueState;
 
 typedef struct {

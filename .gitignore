@@ -1,0 +1,93 @@
+# ===== Keil 构建产物 =====
+Output/
+Listing/
+*.o
+*.axf
+*.hex
+*.crf
+*.d
+*.dep
+*.lnp
+*.lst
+*.map
+*.iex
+*.htm
+*.build_log.htm
+
+# ===== IDE / 用户本地配置 =====
+.vs/
+.vscode/
+*.uvoptx
+*.uvguix.*
+*.suo
+*.slnx.sqlite
+
+# ===== 私有运行配置 =====
+# 根目录和 PID Tuner 的 config.json 都可能包含 API Key，使用
+# config.example.json 作为可公开的配置模板。
+config.json
+.env
+.env.*
+
+# ===== 本地 Codex/临时诊断文件 =====
+.agents/
+.codex-global/
+.npm-cache/
+/_tmp_*.py
+/audit.ps1
+/checktmp.ps1
+/cmp.ps1
+/crfcheck*.ps1
+/extract.ps1
+/recover.ps1
+/restore.ps1
+/codex.bat
+/codex_screenshot.png
+/模板音频分析/
+/AGENTS.md
+/Aux/
+
+# ===== 本地源码快照 =====
+*.bak
+*.bak_*
+*.pid_*
+*.pid_v*
+*.dock_ok
+*.dock_manual_backup
+*.handwriting_dock
+Project/RVMDK（uv5）/x
+
+# ===== Python =====
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# ===== 本地 agent 工具链 =====
+.claude/
+.dsh-vision-router/
+.understand-anything/
+logs/
+
+# ===== 训练模型二进制 (部署到 H: 盘) =====
+*.tflite
+
+# ===== 大文件 / 厂商参考资料 =====
+*.mp4
+*.rar
+*.zip
+*.7z
+*.exe
+*.ttf
+*.baiduyun.p.downloading
+*.download
+*.bkp
+008 openmv资料/
+002-OpenMV视觉模块/
+report_figures/*.png
+report_figures/*.jpg
+
+# ===== 二进制交付物 (报告/简历) =====
+*.docx
+*.pdf
+*.pptx

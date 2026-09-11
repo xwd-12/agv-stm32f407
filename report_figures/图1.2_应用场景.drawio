@@ -1,0 +1,46 @@
+<mxfile host="Electron" agent="Python">
+  <diagram id="diag" name="应用场景">
+    <mxGraphModel dx="1200" dy="550" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="400" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Microsoft YaHei;fontSize=16;fontColor=#2C3E50;fontStyle=1;" value="图1.2  应用场景示意" vertex="1">
+          <mxGeometry height="30" width="400" x="400" y="5" as="geometry" />
+        </mxCell>
+        <mxCell id="s1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Microsoft YaHei;fontSize=13;align=center;verticalAlign=middle;fillColor=#D5F5E3;strokeColor=#1E8449;strokeWidth=2;fontColor=#145A32;fontStyle=1;" value="&lt;b&gt;🏭 智能制造产线&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;产线间自主搬运零部件&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;替代人工，柔性物料流转&lt;/font&gt;" vertex="1">
+          <mxGeometry height="75" width="210" x="30" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="s2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Microsoft YaHei;fontSize=13;align=center;verticalAlign=middle;fillColor=#D6EAF8;strokeColor=#2471A3;strokeWidth=2;fontColor=#1A5276;fontStyle=1;" value="&lt;b&gt;📦 智慧仓储物流&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;自主巡线 + QR扫码分拣&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;入库出库配送自动化&lt;/font&gt;" vertex="1">
+          <mxGeometry height="75" width="210" x="270" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="s3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Microsoft YaHei;fontSize=13;align=center;verticalAlign=middle;fillColor=#FCF3CF;strokeColor=#D4AC0D;strokeWidth=2;fontColor=#7D6608;fontStyle=1;" value="&lt;b&gt;🔬 实验室样本运送&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;洁净区域标本试剂运送&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;减少人员进出，降低污染风险&lt;/font&gt;" vertex="1">
+          <mxGeometry height="75" width="210" x="510" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="s4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Microsoft YaHei;fontSize=13;align=center;verticalAlign=middle;fillColor=#E8DAEF;strokeColor=#8E44AD;strokeWidth=2;fontColor=#6C3483;fontStyle=1;" value="&lt;b&gt;🎓 教育教学平台&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;嵌入式+AI+控制综合实训&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;PID/状态机/机器视觉/神经网络&lt;/font&gt;" vertex="1">
+          <mxGeometry height="75" width="210" x="750" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="s5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Microsoft YaHei;fontSize=13;align=center;verticalAlign=middle;fillColor=#D1F2EB;strokeColor=#117A65;strokeWidth=2;fontColor=#0B5345;fontStyle=1;" value="&lt;b&gt;🤖 服务机器人基础&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;餐厅传菜 · 酒店递送 · 展馆引导&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;巡线+视觉+抓取架构可迁移扩展&lt;/font&gt;" vertex="1">
+          <mxGeometry height="75" width="210" x="990" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="center" parent="1" style="ellipse;whiteSpace=wrap;html=1;arcSize=100;fontFamily=Microsoft YaHei;fontSize=14;align=center;verticalAlign=middle;fillColor=#2C3E50;strokeColor=#1A252F;strokeWidth=2;fontColor=#FFFFFF;fontStyle=1;" value="&lt;b&gt;AGV&lt;br&gt;搬运机器人&lt;/b&gt;" vertex="1">
+          <mxGeometry height="90" width="130" x="535" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow_c1" edge="1" parent="1" source="center" target="s1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7F8C8D;strokeWidth=1.5;dashed=1;endArrow=none;startArrow=none;" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow_c2" edge="1" parent="1" source="center" target="s2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7F8C8D;strokeWidth=1.5;dashed=1;endArrow=none;startArrow=none;" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow_c3" edge="1" parent="1" source="center" target="s3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7F8C8D;strokeWidth=1.5;dashed=1;endArrow=none;startArrow=none;" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow_c4" edge="1" parent="1" source="center" target="s4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7F8C8D;strokeWidth=1.5;dashed=1;endArrow=none;startArrow=none;" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow_c5" edge="1" parent="1" source="center" target="s5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7F8C8D;strokeWidth=1.5;dashed=1;endArrow=none;startArrow=none;" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

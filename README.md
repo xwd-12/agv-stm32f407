@@ -4,7 +4,7 @@
 
 ## 项目简介
 
-基于 STM32F407ZGTx (168MHz) 的四轮差速驱动 AGV，搭载 4-DOF 机械臂与 OpenMV 视觉模块，实现**自主巡线、QR 二维码识别、AI 视觉分类、颜色对准抓取、视觉伺服对接**的全流程智能搬运。系统采用 100Hz 定时中断作为控制心跳，6 个状态机协同工作，支持串口实时调参与 CSV 数据遥测。
+基于 STM32F407ZGTx (168MHz) 的四轮差速驱动 AGV，搭载 4-DOF 机械臂、独立挂钩舵机与 OpenMV 视觉模块，实现**自主巡线、QR 二维码识别、AI 视觉分类、颜色对准抓取、视觉伺服对接与从车拖挂**的全流程智能搬运。系统采用 100Hz 定时中断作为控制心跳，7 个状态机协同工作，支持串口实时调参与 CSV 数据遥测。
 
 **应用场景**：
 - **医院物流**：端侧 AI 离线运行，无需网络，隐私安全
@@ -18,9 +18,9 @@
 STM32F407ZGTx (168MHz)
 ├── 4× 直流减速电机 (PWM 1kHz, 四轮差速驱动)
 ├── 4× 霍尔编码器 (正交解码, TIM2/4/5/8)
-├── 4× 舵机 (腰座/大臂/小臂/夹爪, 50Hz PWM)
+├── 5× 舵机 (腰座/大臂/小臂/夹爪/挂钩, 50Hz PWM)
 ├── 5× 红外巡线传感器 (PC0-PC3+PA4, 低电平有效)
-├── OpenMV Cam M7 (USART3, 115200, 视觉+AI)
+├── OpenMV Cam H7 Plus (USART3, 115200, 视觉+AI)
 └── USB-TTL 调试串口 (UART5, 115200)
 ```
 
@@ -36,6 +36,7 @@ STM32F407ZGTx (168MHz)
 | 舵机 1 大臂 | TIM1_CH2 | PA9 |
 | 舵机 2 小臂 | TIM9_CH1 | PA2 |
 | 舵机 3 夹爪 | TIM1_CH4 | PA11 |
+| 舵机 4 挂钩 | TIM9_CH2 | PA3 |
 | 编码器 0 左前 | TIM5 | PA0/PA1 |
 | 编码器 1 右前 | TIM2 | PA15/PB3 |
 | 编码器 2 左后 | TIM4 | PB6/PB7 |
@@ -51,7 +52,7 @@ STM32F407ZGTx (168MHz)
 
 | 模块 | 文件 | 功能 |
 |------|------|------|
-| 主循环 | `main.c` | 入口 + AI 自动扫描流水线 + 串口命令处理 |
+| 主循环 | `main.c` | 入口 + QR 触发 AI 流水线 + 从车对接状态机 + 串口命令处理 |
 | 巡线控制 | `line_follow.c/h` | 5 路红外传感器 PID 巡线 @ 100Hz ISR |
 | 视觉伺服 | `visual_servo.c/h` | AprilTag 双 PID 精确对接 (横向+纵向解耦) |
 | PID 控制器 | `pid.c/h` | 位置式 + 增量式 PID, 支持积分分离/抗饱和/梯形积分/低通滤波 |
@@ -174,35 +175,30 @@ OpenMV 通过 USART3 (115200) 与 STM32 通讯，使用环形缓冲 + ISR 收发
 
 ---
 
-## 状态机系统 (6 个)
+## 状态机系统 (7 个)
 
 | 状态机 | 运行位置 | 触发方式 | 功能 |
 |--------|---------|---------|------|
 | **ArmSM** | TIM6 ISR (100Hz) | 串口/任务 请求 | 机械臂忙闲锁 + 超时保护 |
 | **VisualServo** | TIM6 ISR (100Hz) | work_mode=3 | 双 PID 视觉对接底层控制 |
-| **AI Pipeline** | 主循环 | 自动 (定时触发) | AI 扫描→颜色对准→抓取→继续巡线 |
+| **AI Pipeline** | 主循环 | QR 触发，且 `dock_state == 5` | QR → 靠近 → AI 分类 → 颜色对准 → 抓取/放置 |
+| **Dock** | 主循环 | 十字路口 + `crossdock` | 右转 → AprilTag 搜索 → 倒车对接 → 挂钩 → 回轨 |
 | **VisionTask** | 主循环 (50ms 节流) | 串口命令 | 颜色/QR/AI 搜索→靠近→执行 |
 | **TaskQueue** | 主循环 | API 调用 | 可编程 N 步骤任务序列 |
 | **TaskNav** | 主循环 (50ms 节流) | 串口 `task_start` | 传统 2 段式 去→抓→回→放 任务 |
 
-### AI 自动扫描流水线 (核心自主任务)
+### QR 触发 AI 流水线 (核心自主任务)
 
 ```
-Phase 0 (冷却):  巡线中 → 5s 稳定 → 15s 冷却
+从车对接完成 (`dock_state == 5`)
      ↓
-Phase 1 (AI扫描): 停车 → 腰座转 ~60° → OpenMV AI 分类
-                  过滤: cls.class_id == mission_class[mission_idx] AND confidence ≥ 25%
-                  8s 超时 → 重新巡线
-     ↓ 目标检测到
-Phase 2 (对准):  class_id → color_id 映射 → OpenMV COLOR 模式
-                  子阶段 0: 腰座比例转向 (±5°), 停车对准
-                  子阶段 1: 车身前后 ±50 + 腰座微调
-                  对齐条件: |cx_err| ≤ 15px AND |dist_err| ≤ 8cm, 连续 3 帧
-                  10s 硬超时
+扫描 QR 码 → 解析当前工位任务 → 靠近目标区至约 15cm
      ↓
-Phase 3 (执行):  机械臂抓取 → 保存/恢复腰座角度
-                  OpenMV → QRCODE → `MODE_LINE_FOLLOW`
-                  15s 冷却 → Phase 0
+OpenMV AI 分类 → 按 `mission_class[]` 筛选目标 → 切换 COLOR 模式
+     ↓
+腰座比例转向 + 车身微调对准 → 机械臂抓取/放置
+     ↓
+保存并恢复腰座角度 → 下一目标或切回巡线
 ```
 
 ### 机械臂状态机 (ArmSM)
@@ -219,7 +215,8 @@ Phase 3 (执行):  机械臂抓取 → 保存/恢复腰座角度
 - 智能断电：到达目标后按关节类型执行不同策略
   - 大臂 (ID 1)：始终保持通电（抗重力）
   - 腰座 (ID 0)：到位后永久断电
-  - 小臂 (ID 2)：周期通断 (通电 500ms → 断电 50ms)
+  - 小臂 (ID 2)：始终保持通电（抗重力）
+  - 夹爪 (ID 3)：周期通断（通电 500ms → 断电 5s）
 
 ---
 
@@ -246,14 +243,14 @@ Phase 3 (执行):  机械臂抓取 → 保存/恢复腰座角度
 
 ```
 ├── User/                    # STM32 应用层全部源码
-│   ├── main.c               # 入口 + AI 流水线 + 主循环
+│   ├── main.c               # 入口 + QR AI 流水线 + 从车对接状态机
 │   ├── line_follow.c/h      # 巡线 PID
 │   ├── visual_servo.c/h     # 视觉伺服双 PID
 │   ├── pid.c/h               # PID 控制器库
 │   ├── action_group.c/h     # 机械臂动作序列
 │   ├── command.c/h          # 串口命令解析
 │   ├── commend_openmv.c/h   # OpenMV 通讯协议
-│   ├── state_machine.c/h    # 3 状态机 (ArmSM/TaskNav/TaskQueue)
+│   ├── state_machine.c/h    # ArmSM / TaskNav / TaskQueue
 │   ├── vision_task.c/h      # 视觉任务编排
 │   ├── servo.c/h            # 舵机 PWM 驱动
 │   ├── smooth_servo.c/h     # 五次样条平滑插值
@@ -278,8 +275,9 @@ Phase 3 (执行):  机械臂抓取 → 保存/恢复腰座角度
 ├── Project/                 # Keil MDK 工程文件
 │   └── RVMDK（uv5）/SICV_F407.uvprojx
 │
-├── Output/                  # 编译产物
-│   └── LED.hex              # 烧录固件
+├── hardware/hook/           # 从车挂钩 CAD/STL 与生成脚本
+├── llm-pid-tuner-dev/       # 串口 CSV + LLM PID 调参工具
+├── config.example.json       # PID Tuner 公开配置模板
 │
 └── Libraries/               # 官方库 (只读)
     ├── CMSIS/               # ARM Cortex-M4 CMSIS
@@ -297,9 +295,13 @@ Phase 3 (执行):  机械臂抓取 → 保存/恢复腰座角度
 | MCU | STM32F407ZGTx, 168MHz |
 | 下载器 | ST-Link V2 (SWD: PA13/PA14) |
 | 串口终端 | 115200 baud, 8N1 |
-| OpenMV IDE | OpenMV Cam M7 固件 |
+| OpenMV IDE | OpenMV Cam H7 Plus 固件 |
 
 **编译流程**：Keil 打开 `Project/RVMDK（uv5）/SICV_F407.uvprojx` → F7 编译 → F8 下载。
+
+### PID Tuner 配置
+
+可选的 PID 调参工具位于 `llm-pid-tuner-dev/`。使用前将根目录的 `config.example.json` 复制为 `config.json`，填入自己的 API Key；实际配置已被 Git 忽略，不会上传。
 
 ---
 
@@ -308,7 +310,7 @@ Phase 3 (执行):  机械臂抓取 → 保存/恢复腰座角度
 ### 安全性
 - **PVD 低压检测** (2.9V)：最高优先级中断，自动紧急制动
 - **机械臂超时保护**：30s 动作超时自动 ESTOP
-- **丢标签停车**：视觉伺服 200ms 内无数据自动停车
+- **丢标签停车**：视觉伺服 1s 内无数据自动停车
 - **启动安全**：上电立即紧急制动，防止 GPIO 浮空导致电机误动
 - **编码器故障检测**：delta > 10× 最大值连续 10 次 → 强制重同步
 
@@ -329,12 +331,15 @@ Phase 3 (执行):  机械臂抓取 → 保存/恢复腰座角度
 ### 烧录运行
 1. Keil 打开 `Project/RVMDK（uv5）/SICV_F407.uvprojx`
 2. F7 编译，F8 下载到 STM32F407
-3. 上电自动进入巡线模式
+3. 上电自动开跑整流程：巡线 → **十字路口对接**（自动右拐+AprilTag 倒车挂钩）→ Station 0 抓 3 件放从车 → Station 1 从车取件交付 → LED 三闪完成
 4. 串口连接 (115200)，等待 3 秒后发送 `help` 查看命令列表
 
 ### 常用操作
 ```bash
 help          # 查看全部命令
+run           # 一键重置并重跑整流程 (等价 restart)
+crossdock 0|1 # 开关十字路口自动对接 (boot 默认 1)
+dockstat      # 查看对接状态机状态
 vpid          # 查看视觉伺服 PID 参数
 mode 1        # 切换到巡线模式
 mode 3        # 切换到视觉伺服模式

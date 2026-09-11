@@ -1,0 +1,68 @@
+<mxfile host="Electron" agent="Python">
+  <diagram id="diag" name="AI自动扫描Pipeline">
+    <mxGraphModel dx="1851" dy="749" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="750" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Microsoft YaHei;fontSize=16;fontColor=#2C3E50;fontStyle=1;" value="图3  AI自动扫描Pipeline状态机" vertex="1">
+          <mxGeometry height="30" width="400" x="225" y="5" as="geometry" />
+        </mxCell>
+        <mxCell id="start" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=12;fontFamily=Microsoft YaHei;fontSize=12;align=center;verticalAlign=middle;fillColor=#FDEBD0;strokeColor=#B9770E;strokeWidth=2;fontColor=#7D6608;fontStyle=1;" value="&lt;b&gt;启动&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;上电→巡线出发&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="140" x="355" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="p0" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=12;align=center;verticalAlign=middle;fillColor=#D6EAF8;strokeColor=#2471A3;strokeWidth=2;fontColor=#1A5276;fontStyle=1;" value="&lt;b&gt;Phase 0  冷却等待&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;首次稳定5s  |  任务间隔15s&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;期间保持巡线&lt;/font&gt;" vertex="1">
+          <mxGeometry height="70" width="380" x="235" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="tR75evte8ssEgSmd6ZtP-1" edge="1" parent="1" source="p1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="p2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="p1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=12;align=center;verticalAlign=middle;fillColor=#D5F5E3;strokeColor=#1E8449;strokeWidth=2;fontColor=#145A32;fontStyle=1;" value="&lt;b&gt;Phase 1  AI扫描&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;停车 → 腰座旋转扫描(±60°) → OpenMV切AI模式&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;筛选: class_id=0(红)  置信度≥50%  |  8s超时自动恢复巡线&lt;/font&gt;" vertex="1">
+          <mxGeometry height="70" width="600" x="125" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="p2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=12;align=center;verticalAlign=middle;fillColor=#FCF3CF;strokeColor=#D4AC0D;strokeWidth=2;fontColor=#7D6608;fontStyle=1;" value="&lt;b&gt;Phase 2  对准&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;子0: 腰座比例转向 0.04°/px ±5° 等待 cx≤25px×3帧&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;子1: 车身前后微调 ±50 距离目标12cm 对准: cx≤15px dist≤8cm×3帧&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;丢标1.5s→腰座±10°扫描  |  10s总超时强制进入Phase 3&lt;/font&gt;" vertex="1">
+          <mxGeometry height="80" width="760" x="45" y="360" as="geometry" />
+        </mxCell>
+        <mxCell id="p3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=12;align=center;verticalAlign=middle;fillColor=#F2D7D5;strokeColor=#C0392B;strokeWidth=2;fontColor=#922B21;fontStyle=1;" value="&lt;b&gt;Phase 3  执行抓取&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;保存腰座对准角度 → Action_Grasp() → 还原腰座角度&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;OpenMV切回QRCODE模式  |  恢复MODE_LINE_FOLLOW  |  设置15s冷却&lt;/font&gt;" vertex="1">
+          <mxGeometry height="70" width="650" x="100" y="480" as="geometry" />
+        </mxCell>
+        <mxCell id="loop" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=12;fontFamily=Microsoft YaHei;fontSize=12;align=center;verticalAlign=middle;fillColor=#FDEBD0;strokeColor=#B9770E;strokeWidth=2;fontColor=#7D6608;fontStyle=1;" value="&lt;b&gt;恢复巡线 → 回到 Phase 0&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;循环执行，逐个收集货物&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="280" x="285" y="590" as="geometry" />
+        </mxCell>
+        <mxCell id="a_start" edge="1" parent="1" source="start" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#7F8C8D;strokeWidth=2;" target="p0">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a0" edge="1" parent="1" source="p0" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#2471A3;strokeWidth=2.5;" target="p1" value="冷却到期">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a1" edge="1" parent="1" source="p1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#1E8449;strokeWidth=2.5;" target="p2" value="检测到目标">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a2" edge="1" parent="1" source="p2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#D4AC0D;strokeWidth=2.5;" target="p3" value="对准完成/超时">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a3" edge="1" parent="1" source="p3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#C0392B;strokeWidth=2.5;" target="loop" value="抓取完成">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a_loop" edge="1" parent="1" source="loop" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#E74C3C;strokeWidth=2;dashed=1;" target="p0" value="循环">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="60" y="615" />
+              <mxPoint x="60" y="175" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a_timeout" edge="1" parent="1" source="p1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#E67E22;strokeWidth=2;dashed=1;" target="p0" value="8s超时未检测到">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="20" y="285" />
+              <mxPoint x="20" y="175" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="note" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=6;fontFamily=Microsoft YaHei;fontSize=9;align=left;verticalAlign=middle;fillColor=#F8F9F9;strokeColor=#BDC3C7;strokeWidth=1;" value="&lt;b&gt;说明&lt;/b&gt;&lt;br&gt;• class_id→颜色映射: 0=红 1=绿 2=黄&lt;br&gt;• 当前仅识别红色(class_id=0)&lt;br&gt;• QR检测当前已跳过，改为周期性触发&lt;br&gt;• 所有超时均有兜底，保证不死锁" vertex="1">
+          <mxGeometry height="75" width="280" x="540" y="610" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

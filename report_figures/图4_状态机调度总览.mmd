@@ -1,0 +1,31 @@
+graph TB
+    subgraph ISR["TIM6 ISR 100Hz 硬实时"]
+        ARM["ArmSM<br/>机械臂互斥锁<br/>超时保护 30s"]
+        VS["VisualServo<br/>双PID视觉对接<br/>横向+纵向"]
+        LF["巡线PID<br/>传感器→转向→速度<br/>line_time定时停车"]
+    end
+
+    subgraph MAIN["main()主循环 软实时"]
+        AI["AI自动扫描Pipeline<br/>Phase0→1→2→3<br/>自动周期触发"]
+        TQ["TaskQueue<br/>N步脚本化任务链<br/>巡线 > 对接 > 抓取 > 放置"]
+        VT["VisionTask<br/>颜色/QR/AI任务<br/>50ms节流"]
+        TN["TaskNav<br/>传统巡线→抓→放<br/>50ms节流 遗留"]
+    end
+
+    subgraph TRIGGER["触发源"]
+        SER["UART5串口命令"]
+        CRS["十字路口检测<br/>5路全踩"]
+        TMR["15s周期定时"]
+    end
+
+    SER --> ARM
+    SER --> TQ
+    SER --> VT
+    SER --> TN
+    CRS --> TQ
+    TMR --> AI
+    TQ --> VS
+    TQ --> ARM
+    AI --> ARM
+    VT --> ARM
+    TN --> ARM

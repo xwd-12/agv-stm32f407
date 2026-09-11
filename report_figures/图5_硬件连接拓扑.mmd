@@ -1,0 +1,49 @@
+graph TB
+    MCU["STM32F407ZGTx<br/>168MHz Cortex-M4<br/>SWD调试 PA13/PA14"]
+
+    subgraph 电机驱动["电机驱动 1kHz PWM"]
+        M0["Motor0 左前<br/>PWM: PA7 TIM3_CH2<br/>IN1: PE3 IN2: PE4"]
+        M1["Motor1 右前<br/>PWM: PA6 TIM3_CH1<br/>IN1: PE5 IN2: PE6"]
+        M2["Motor2 左后<br/>PWM: PB1 TIM3_CH4<br/>IN1: PC8 IN2: PC4"]
+        M3["Motor3 右后 ⚠编码器坏<br/>PWM: PB15 TIM12_CH2<br/>IN1: PD3 IN2: PD4"]
+    end
+
+    subgraph 编码器["编码器 正交解码"]
+        E0["Enc0 TIM5<br/>PA0 PA1"]
+        E1["Enc1 TIM2<br/>PA15 PB3"]
+        E2["Enc2 TIM4<br/>PB6 PB7"]
+        E3["Enc3 TIM8 ⚠损坏<br/>PC6 PC7"]
+    end
+
+    subgraph 舵机["舵机 50Hz PWM"]
+        S0["腰座 PA8 TIM1_CH1"]
+        S1["大臂 PA9 TIM1_CH2"]
+        S2["小臂 PA2 TIM9_CH1"]
+        S3["夹爪 ⚠卡死 PA11"]
+    end
+
+    subgraph 通信["通信接口"]
+        U5["UART5 调试<br/>PC12 TX PD2 RX<br/>115200"]
+        U3["USART3 OpenMV<br/>PC10 TX PC11 RX<br/>115200"]
+        U2["USART2 蓝牙 ⚠已禁用<br/>PD5 PD6"]
+    end
+
+    subgraph 传感器["传感器"]
+        IR["5路巡线 GPIO<br/>PC0 PC1 PC2 PC3 PA4<br/>低电平有效"]
+        PVD["PVD 电压监测<br/>2.9V阈值<br/>最高优先级 0,0"]
+    end
+
+    MCU --> M0
+    MCU --> M1
+    MCU --> M2
+    MCU --> M3
+    MCU --> S0
+    MCU --> S1
+    MCU --> S2
+    E0 --> MCU
+    E1 --> MCU
+    E2 --> MCU
+    MCU --> U5
+    U3 --> MCU
+    IR --> MCU
+    PVD --> MCU

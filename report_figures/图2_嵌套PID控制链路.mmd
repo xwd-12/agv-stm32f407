@@ -1,0 +1,30 @@
+graph LR
+    subgraph 位置环["位置环 20ms"]
+        SET["设定位置<br/>encoder_counts"] --> POSPID["位置式PID<br/>pos_kp/pos_ki/pos_kd"]
+        POSPID --> SAT1["±600钳位"]
+    end
+
+    subgraph 巡线环["巡线环 10ms 仅巡线模式"]
+        LS["5路传感器<br/>加权误差±2"] --> LFPID["巡线PID<br/>Kp=180 Ki=2 Kd=2"]
+        LFPID --> SAT3["±600钳位"]
+    end
+
+    subgraph 速度环["速度环 10ms"]
+        SAT1 --> SUM["±"]
+        SAT3 --> SUM
+        SUM --> VELPID["增量式PID<br/>Kp=5.5 Ki=0.16"]
+        VELPID --> DIR["motor_dir校正<br/>{1,-1,1,-1}"]
+        DIR --> PWM["PWM输出<br/>0-999"]
+    end
+
+    subgraph 执行["执行+反馈"]
+        PWM --> MTR["直流电机"]
+        MTR --> ENC["编码器"]
+        ENC --> VELFB["速度反馈"]
+        ENC --> POSFB["位置反馈<br/>积分累加"]
+    end
+
+    VELFB -->|"-"| VELPID
+    POSFB -->|"-"| POSPID
+
+    SAT3 -->|"left+=turn<br/>right-=turn<br/>钳位0-1000"| SUM

@@ -1,0 +1,57 @@
+<mxfile host="Electron" agent="Python">
+  <diagram id="diag" name="设计流程">
+    <mxGraphModel dx="1001" dy="749" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1000" pageHeight="300" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Microsoft YaHei;fontSize=16;fontColor=#2C3E50;fontStyle=1;" value="图1.6  系统设计流程" vertex="1">
+          <mxGeometry height="30" width="400" x="300" y="5" as="geometry" />
+        </mxCell>
+        <mxCell id="step1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=12;fontFamily=Microsoft YaHei;fontSize=13;align=center;verticalAlign=middle;fillColor=#D5F5E3;strokeColor=#1E8449;strokeWidth=2;fontColor=#145A32;fontStyle=1;" value="&lt;b&gt;需求分析&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;搬运任务定义 · 场地规则分析&lt;/font&gt;" vertex="1">
+          <mxGeometry height="55" width="180" x="50" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="step2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=12;fontFamily=Microsoft YaHei;fontSize=13;align=center;verticalAlign=middle;fillColor=#D6EAF8;strokeColor=#2471A3;strokeWidth=2;fontColor=#1A5276;fontStyle=1;" value="&lt;b&gt;系统设计&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;硬件选型 · 架构分层 · 通信协议&lt;/font&gt;" vertex="1">
+          <mxGeometry height="55" width="180" x="280" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="step3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=12;fontFamily=Microsoft YaHei;fontSize=13;align=center;verticalAlign=middle;fillColor=#FCF3CF;strokeColor=#D4AC0D;strokeWidth=2;fontColor=#7D6608;fontStyle=1;" value="&lt;b&gt;硬件搭建&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;电路焊接 · 底盘组装 · 传感器标定&lt;/font&gt;" vertex="1">
+          <mxGeometry height="55" width="180" x="510" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="step4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=12;fontFamily=Microsoft YaHei;fontSize=13;align=center;verticalAlign=middle;fillColor=#E8DAEF;strokeColor=#8E44AD;strokeWidth=2;fontColor=#6C3483;fontStyle=1;" value="&lt;b&gt;软件开发&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;底层驱动 · PID调优 · 状态机联调&lt;/font&gt;" vertex="1">
+          <mxGeometry height="55" width="180" x="740" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="step5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=12;fontFamily=Microsoft YaHei;fontSize=13;align=center;verticalAlign=middle;fillColor=#D1F2EB;strokeColor=#117A65;strokeWidth=2;fontColor=#0B5345;fontStyle=1;" value="&lt;b&gt;系统联调&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;全流程测试 · 场景验证&lt;/font&gt;" vertex="1">
+          <mxGeometry height="55" width="180" x="740" y="155" as="geometry" />
+        </mxCell>
+        <mxCell id="step6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=12;fontFamily=Microsoft YaHei;fontSize=13;align=center;verticalAlign=middle;fillColor=#FDEDEC;strokeColor=#C0392B;strokeWidth=2;fontColor=#922B21;fontStyle=1;" value="&lt;b&gt;迭代优化&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;参数精调 · AI重训 · 从车对接&lt;/font&gt;" vertex="1">
+          <mxGeometry height="55" width="180" x="510" y="155" as="geometry" />
+        </mxCell>
+        <mxCell id="a12" edge="1" parent="1" source="step1" style="endArrow=block;html=1;strokeColor=#7F8C8D;strokeWidth=2;rounded=1;" target="step2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a23" edge="1" parent="1" source="step2" style="endArrow=block;html=1;strokeColor=#7F8C8D;strokeWidth=2;rounded=1;" target="step3" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a34" edge="1" parent="1" source="step3" style="endArrow=block;html=1;strokeColor=#7F8C8D;strokeWidth=2;rounded=1;" target="step4" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a45" edge="1" parent="1" source="step4" style="endArrow=block;html=1;strokeColor=#7F8C8D;strokeWidth=2;rounded=1;" target="step5" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a56" edge="1" parent="1" source="step5" style="endArrow=block;html=1;strokeColor=#7F8C8D;strokeWidth=2;rounded=1;" target="step6" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a61" edge="1" parent="1" source="step6" style="endArrow=block;html=1;strokeColor=#E74C3C;strokeWidth=2;rounded=1;dashed=1;exitX=-0.002;exitY=0.655;exitDx=0;exitDy=0;exitPerimeter=0;" target="step1" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="140" y="190" />
+            </Array>
+            <mxPoint x="610" y="220" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="loop_label" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Microsoft YaHei;fontSize=10;fontColor=#E74C3C;fontStyle=1;" value="闭环迭代" vertex="1">
+          <mxGeometry height="40" width="90" x="280" y="155" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

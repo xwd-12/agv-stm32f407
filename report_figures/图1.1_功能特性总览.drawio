@@ -1,0 +1,34 @@
+<mxfile host="Electron" agent="Python">
+  <diagram id="diag" name="功能特性总览">
+    <mxGraphModel dx="1001" dy="749" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="550" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontFamily=Microsoft YaHei;fontSize=16;fontColor=#2C3E50;fontStyle=1;" value="图1.1  系统功能与特性总览" vertex="1">
+          <mxGeometry height="30" width="600" x="300" y="5" as="geometry" />
+        </mxCell>
+        <mxCell id="f1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=13;align=center;verticalAlign=middle;fillColor=#D5F5E3;strokeColor=#1E8449;strokeWidth=2;fontColor=#145A32;fontStyle=1;" value="&lt;b&gt;自主巡线&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;5路红外 + PID控制，自动循迹&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;十字路口检测，丢线防误停&lt;/font&gt;" vertex="1">
+          <mxGeometry height="80" width="360" x="30" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="f2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=13;align=center;verticalAlign=middle;fillColor=#D6EAF8;strokeColor=#2471A3;strokeWidth=2;fontColor=#1A5276;fontStyle=1;" value="&lt;b&gt;AI 视觉识别&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;MobileNetV2 轻量网络 · int8量化&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;三分类 + QR解码 + AprilTag定位&lt;/font&gt;" vertex="1">
+          <mxGeometry height="80" width="360" x="420" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="f3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=13;align=center;verticalAlign=middle;fillColor=#FCF3CF;strokeColor=#D4AC0D;strokeWidth=2;fontColor=#7D6608;fontStyle=1;" value="&lt;b&gt;自主抓取放置&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;4-DOF机械臂 · 三关节联动&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;腰座转向 + 车身微调精确对准&lt;/font&gt;" vertex="1">
+          <mxGeometry height="80" width="360" x="810" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="f4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=13;align=center;verticalAlign=middle;fillColor=#E8DAEF;strokeColor=#8E44AD;strokeWidth=2;fontColor=#6C3483;fontStyle=1;" value="&lt;b&gt;智能任务调度&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;6状态机协同 · 自动触发AI扫描→抓取→恢复巡线&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;多步骤任务脚本编排 (≤16步)&lt;/font&gt;" vertex="1">
+          <mxGeometry height="80" width="360" x="30" y="165" as="geometry" />
+        </mxCell>
+        <mxCell id="f5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=13;align=center;verticalAlign=middle;fillColor=#FDEDEC;strokeColor=#C0392B;strokeWidth=2;fontColor=#922B21;fontStyle=1;" value="&lt;b&gt;放置机械拖挂运输 (预计实现)&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;十字路口定位 → 视觉伺服对接从车&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;双PID精确倒车，拖挂巡线运输&lt;/font&gt;" vertex="1">
+          <mxGeometry height="80" width="360" x="420" y="165" as="geometry" />
+        </mxCell>
+        <mxCell id="f6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Microsoft YaHei;fontSize=13;align=center;verticalAlign=middle;fillColor=#D1F2EB;strokeColor=#117A65;strokeWidth=2;fontColor=#0B5345;fontStyle=1;" value="&lt;b&gt;PC 智能调试&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;50+串口命令 · CSV数据遥测&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;LLM PID Tuner AI自动优化参数&lt;/font&gt;" vertex="1">
+          <mxGeometry height="80" width="360" x="810" y="165" as="geometry" />
+        </mxCell>
+        <mxCell id="flow_bg" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=10;fontFamily=Microsoft YaHei;fontSize=13;align=center;verticalAlign=middle;fillColor=#2C3E50;strokeColor=#1A252F;strokeWidth=2;fontColor=#FFFFFF;fontStyle=1;" value="全流程自动化：巡线 → AI识别 → 抓取 → 调度 → 拖挂运输 → 调试" vertex="1">
+          <mxGeometry height="40" width="1140" x="30" y="280" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

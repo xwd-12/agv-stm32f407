@@ -4,6 +4,7 @@
 #include "motor.h"
 #include "pid.h"
 #include "line_follow.h"
+#include "line_sensor.h"
 #include "smooth_servo.h"
 #include "state_machine.h"
 #include "commend_openmv.h"
@@ -22,6 +23,8 @@ extern Line_follow_Handle line_follow;
 
 volatile uint32_t g_sys_tick = 0;
 volatile int32_t line_time_ticks = 0;   // 巡线定时停止: 存储截止 tick (非倒计数)
+volatile uint8_t  trailer_dock_flag = 0;  // 十字路口检测: 1=触发从车对接 (ISR置位, 主循环消费)
+extern volatile uint8_t cross_dock_enable;  // crossdock 开关 (main.c定义, 默认禁用)
 int16_t last_pid_setpoint[4] = {0};
 int16_t last_pid_speed[4] = {0};
 int16_t last_pid_output[4] = {0};
@@ -75,6 +78,10 @@ void TIM6_DAC_IRQHandler(void)
 				line_time_ticks = 0;
 			}
 			LineFollow_Task(&line_follow,target_speed);
+			/* 十字路口检测: 5路全踩 -> 置标志(不停车, 巡线自动右拐进横线) */
+			if (cross_dock_enable && !trailer_dock_flag && LineSensor_AllOn()) {
+				trailer_dock_flag = 1;   /* 主循环接管: 脱线检测+对接 */
+			}
 		}
 		else if(work_mode == MODE_POSITION)
 		{
